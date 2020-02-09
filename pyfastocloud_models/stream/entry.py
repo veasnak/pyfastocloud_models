@@ -92,6 +92,11 @@ class VodFields(BaseFields):
     DURATION_FIELD = 'duration'
 
 
+class CatchupsFields(BaseFields):
+    START_RECORD_FIELD = 'start'
+    STOP_RECORD_FIELD = 'stop'
+
+
 class StreamStatus(IntEnum):
     NEW = 0
     INIT = 1
@@ -646,6 +651,12 @@ class CatchupStream(TimeshiftRecorderStream):
 
     def get_type(self):
         return constants.StreamType.CATCHUP
+
+    def to_front_dict(self) -> dict:
+        base = super(CatchupStream, self).to_front_dict()
+        base[CatchupsFields.START_RECORD_FIELD] = date_to_utc_msec(self.start)
+        base[CatchupsFields.STOP_RECORD_FIELD] = date_to_utc_msec(self.stop)
+        return base
 
     @classmethod
     def make_stream(cls, settings):
