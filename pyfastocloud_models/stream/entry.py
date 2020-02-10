@@ -297,6 +297,9 @@ class HardwareStream(IStream):
     def get_type(self):
         raise NotImplementedError('subclasses must override get_type()!')
 
+    def is_started(self) -> bool:
+        return self._start_time != 0
+
     def reset(self):
         self._status = StreamStatus.NEW
         self._cpu = 0.0
