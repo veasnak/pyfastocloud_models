@@ -361,7 +361,7 @@ class HardwareStream(IStream):
             args = json.loads(self.extra_config_fields)
             for key, value in args.items():
                 conf[key] = value
-        except ValueError as e:
+        except:
             pass
 
         return conf
@@ -663,6 +663,7 @@ class CatchupStream(TimeshiftRecorderStream):
         stream = cls()
         stream._settings = settings
         stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
+        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
         return stream
 
 

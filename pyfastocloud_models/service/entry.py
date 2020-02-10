@@ -42,7 +42,7 @@ def safe_delete_stream(stream: IStream):
         subscribers = Subscriber.objects()
         for subscriber in subscribers:
             subscriber.remove_official_stream(stream)
-        for catchup in stream.catchups:
+        for catchup in stream.parts:
             safe_delete_stream(catchup)
         stream.delete()
 
