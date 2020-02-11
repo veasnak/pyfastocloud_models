@@ -666,8 +666,16 @@ class CatchupStream(TimeshiftRecorderStream):
         stream = cls()
         stream._settings = settings
         stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
         return stream
+
+    def config(self) -> dict:
+        conf = super(CatchupStream, self).config()
+        conf[ConfigFields.TIMESHIFT_DIR] = self._generate_catchup_dir(oid=OutputUrl.generate_id())
+        return conf
+
+    # private:
+    def _generate_catchup_dir(self, oid: int):
+        return '{0}/{1}/{2}/{3}'.format(self._settings.hls_directory, self.get_type(), self.get_id(), oid)
 
 
 class TimeshiftPlayerStream(RelayStream):
