@@ -386,6 +386,9 @@ class UserAgent(IntEnum):
     VLC = 1
     FFMPEG = 2
     WINK = 3
+    CHROME = 4
+    MOZILLA = 5
+    SAFARI = 6
 
     @classmethod
     def choices(cls):
