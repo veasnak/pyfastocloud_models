@@ -290,7 +290,7 @@ class Subscriber(Document):
         ostreams = self.official_streams()
         for stream in ostreams:
             ostream = stream.sid
-            if is_live_stream(stream):
+            if is_live_stream(ostream):
                 if select:
                     self._add_official_stream(ostream)
                 else:
