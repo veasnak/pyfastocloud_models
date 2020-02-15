@@ -287,34 +287,31 @@ class Subscriber(Document):
         return streams
 
     def select_all_streams(self, select: bool):
-        ostreams = self.official_streams()
+        ostreams = self.all_available_official_streams()
         for stream in ostreams:
-            ostream = stream.sid
-            if is_live_stream(ostream):
+            if is_live_stream(stream):
                 if select:
-                    self._add_official_stream(ostream)
+                    self._add_official_stream(stream)
                 else:
-                    self.remove_official_stream(ostream)
+                    self.remove_official_stream(stream)
 
     def select_all_vods(self, select: bool):
-        ostreams = self.official_streams()
+        ostreams = self.all_available_official_vods()
         for stream in ostreams:
-            ostream = stream.sid
-            if is_vod_stream(ostream):
+            if is_vod_stream(stream):
                 if select:
-                    self._add_official_stream(ostream)
+                    self._add_official_stream(stream)
                 else:
-                    self.remove_official_stream(ostream)
+                    self.remove_official_stream(stream)
 
     def select_all_catchups(self, select: bool):
-        ostreams = self.official_streams()
+        ostreams = self.all_available_official_catchups()
         for stream in ostreams:
-            ostream = stream.sid
-            if is_catchup(ostream):
+            if is_catchup(stream):
                 if select:
-                    self._add_official_stream(ostream)
+                    self._add_official_stream(stream)
                 else:
-                    self.remove_official_stream(ostream)
+                    self.remove_official_stream(stream)
 
     def delete(self, *args, **kwargs):
         return Document.delete(self, *args, **kwargs)
