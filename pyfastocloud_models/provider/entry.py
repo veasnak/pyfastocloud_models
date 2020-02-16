@@ -18,6 +18,10 @@ class Provider(MongoModel):
         GUEST = 0,
         USER = 1
 
+    class Meta:
+        collection_name = 'providers'
+        allow_inheritance = True
+
     email = fields.CharField(max_length=64, required=True)
     password = fields.CharField(required=True)
     created_date = fields.DateTimeField(default=datetime.now)
@@ -27,6 +31,13 @@ class Provider(MongoModel):
     language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
 
     servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
+
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def add_server(self, server):
         self.servers.append(server)

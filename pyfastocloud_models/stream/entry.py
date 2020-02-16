@@ -8,8 +8,7 @@ from pymodm import MongoModel, fields
 
 from pyfastocloud_models.utils.utils import date_to_utc_msec
 import pyfastocloud_models.constants as constants
-from pyfastocloud_models.common_entries import Rational, Size, Logo, RSVGLogo, InputUrls, InputUrl, OutputUrls, \
-    OutputUrl
+from pyfastocloud_models.common_entries import Rational, Size, Logo, RSVGLogo, InputUrl, OutputUrl
 
 
 class ConfigFields:
@@ -129,18 +128,22 @@ class StreamLogLevel(IntEnum):
 
 
 class IStream(MongoModel):
+    class Meta:
+        collection_name = 'streams'
+        allow_inheritance = True
+
     created_date = fields.DateTimeField(default=datetime.now)  # for inner use
     name = fields.CharField(default=constants.DEFAULT_STREAM_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
                             min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)
     group = fields.CharField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
                              max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
-                             min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True)
+                             min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True, blank=True)
 
     tvg_id = fields.CharField(default=constants.DEFAULT_STREAM_TVG_ID, max_length=constants.MAX_STREAM_TVG_ID_LENGTH,
                               min_length=constants.MIN_STREAM_TVG_ID_LENGTH,
-                              required=True)
+                              required=True, blank=True)
     tvg_name = fields.CharField(default=constants.DEFAULT_STREAM_TVG_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
-                                min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)  #
+                                min_length=constants.MIN_STREAM_NAME_LENGTH, required=True, blank=True)  #
     tvg_logo = fields.CharField(default=constants.DEFAULT_STREAM_ICON_URL, max_length=constants.MAX_URL_LENGTH,
                                 min_length=constants.MIN_URL_LENGTH, required=True)  #
 
@@ -150,7 +153,7 @@ class IStream(MongoModel):
                                required=True)  # https://support.google.com/googleplay/answer/6209544
 
     parts = fields.ListField(fields.ReferenceField('IStream'), default=[])
-    output = fields.EmbeddedDocumentField(OutputUrls, default=OutputUrls())  #
+    output = fields.EmbeddedDocumentListField(OutputUrl, default=[])  #
 
     def add_part(self, stream):
         self.parts.append(stream)
@@ -183,8 +186,12 @@ class IStream(MongoModel):
     def get_type(self):
         raise NotImplementedError('subclasses must override get_type()!')
 
+    @property
+    def id(self):
+        return self.pk
+
     def get_id(self) -> str:
-        return str(self.id)
+        return str(self.pk)
 
     def config(self) -> dict:
         res = {
@@ -209,7 +216,7 @@ class IStream(MongoModel):
                 stream_type == constants.StreamType.PROXY or stream_type == constants.StreamType.VOD_PROXY or \
                 stream_type == constants.StreamType.VOD_ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or stream_type == constants.StreamType.CATCHUP:
-            for out in self.output.urls:
+            for out in self.output:
                 result += '#EXTINF:-1 tvg-id="{0}" tvg-name="{1}" tvg-logo="{2}" group-title="{3}",{4}\n{5}\n'.format(
                     self.tvg_id, self.tvg_name, self.tvg_logo, self.group, self.name, out.uri)
 
@@ -225,7 +232,7 @@ class IStream(MongoModel):
                 stream_type == constants.StreamType.PROXY or stream_type == constants.StreamType.VOD_PROXY or \
                 stream_type == constants.StreamType.VOD_ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or stream_type == constants.StreamType.CATCHUP:
-            for out in self.output.urls:
+            for out in self.output:
                 parsed_uri = urlparse(out.uri)
                 if parsed_uri.scheme == 'http' or parsed_uri.scheme == 'https':
                     file_name = os.path.basename(parsed_uri.path)
@@ -260,14 +267,14 @@ class ProxyStream(IStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
 class HardwareStream(IStream):
     log_level = fields.IntegerField(default=StreamLogLevel.LOG_LEVEL_INFO, required=True)
 
-    input = fields.EmbeddedDocumentField(InputUrls, default=InputUrls())
+    input = fields.EmbeddedDocumentListField(InputUrl, default=[])
     have_video = fields.BooleanField(default=constants.DEFAULT_HAVE_VIDEO, required=True)
     have_audio = fields.BooleanField(default=constants.DEFAULT_HAVE_AUDIO, required=True)
     audio_select = fields.IntegerField(default=constants.INVALID_AUDIO_SELECT, required=True)
@@ -275,7 +282,7 @@ class HardwareStream(IStream):
     avformat = fields.BooleanField(default=constants.DEFAULT_AVFORMAT, required=True)
     restart_attempts = fields.IntegerField(default=constants.DEFAULT_RESTART_ATTEMPTS, required=True)
     auto_exit_time = fields.IntegerField(default=constants.DEFAULT_AUTO_EXIT_TIME, required=True)
-    extra_config_fields = fields.CharField(default='')
+    extra_config_fields = fields.CharField(default='', blank=True)
 
     # runtime
     _status = StreamStatus.NEW
@@ -418,7 +425,7 @@ class HardwareStream(IStream):
         if stream_type == constants.StreamType.RELAY or stream_type == constants.StreamType.ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or \
                 stream_type == constants.StreamType.VOD_ENCODE or stream_type == constants.StreamType.VOD_RELAY:
-            for out in self.input.urls:
+            for out in self.input:
                 result += '#EXTINF:-1 tvg-id="{0}" tvg-name="{1}" tvg-logo="{2}" group-title="{3}",{4}\n{5}\n'.format(
                     self.tvg_id, self.tvg_name, self.tvg_logo, self.group, self.name, out.uri)
 
@@ -428,8 +435,8 @@ class HardwareStream(IStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
     # private
@@ -443,7 +450,7 @@ class HardwareStream(IStream):
         return '{0}/{1}/{2}/{3}'.format(self._settings.cods_directory, self.get_type(), self.get_id(), oid)
 
     def _fixup_http_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -451,10 +458,10 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_http_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_http_link(val.hls_type, filename, val.id)
 
     def _fixup_vod_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -462,10 +469,10 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_vod_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_vod_link(val.hls_type, filename, val.id)
 
     def _fixup_cod_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -473,7 +480,7 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_cod_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_cod_link(val.hls_type, filename, val.id)
 
 
 class RelayStream(HardwareStream):
@@ -505,8 +512,8 @@ class RelayStream(HardwareStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -601,8 +608,8 @@ class EncodeStream(HardwareStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -637,7 +644,7 @@ class TimeshiftRecorderStream(RelayStream):
         stream = cls()
         stream.visible = False
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
         return stream
 
 
@@ -663,7 +670,7 @@ class CatchupStream(TimeshiftRecorderStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
         return stream
 
     def config(self) -> dict:
@@ -696,8 +703,8 @@ class TimeshiftPlayerStream(RelayStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -720,8 +727,8 @@ class TestLifeStream(RelayStream):
         stream = cls()
         stream._settings = settings
         stream.visible = False
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id(), uri=constants.DEFAULT_TEST_URL)])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id(), uri=constants.DEFAULT_TEST_URL)]
         return stream
 
 
@@ -743,8 +750,8 @@ class CodRelayStream(RelayStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -766,8 +773,8 @@ class CodEncodeStream(EncodeStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -809,8 +816,8 @@ class ProxyVodStream(ProxyStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -840,8 +847,8 @@ class VodRelayStream(RelayStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -871,8 +878,8 @@ class VodEncodeStream(EncodeStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -884,8 +891,8 @@ class EventStream(VodEncodeStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 

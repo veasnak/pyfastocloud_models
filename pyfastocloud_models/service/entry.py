@@ -38,7 +38,7 @@ class ProviderPair(EmbeddedMongoModel):
 def safe_delete_stream(stream: IStream):
     if stream:
         from pyfastocloud_models.subscriber.entry import Subscriber
-        subscribers = Subscriber.objects()
+        subscribers = Subscriber.objects.get({})
         for subscriber in subscribers:
             subscriber.remove_official_stream(stream)
         for catchup in stream.parts:
@@ -47,6 +47,9 @@ def safe_delete_stream(stream: IStream):
 
 
 class ServiceSettings(MongoModel):
+    class Meta:
+        collection_name = 'services'
+
     DEFAULT_SERVICE_NAME = 'Service'
     MIN_SERVICE_NAME_LENGTH = 3
     MAX_SERVICE_NAME_LENGTH = 30
@@ -94,6 +97,13 @@ class ServiceSettings(MongoModel):
     vods_in_directory = fields.CharField(default=DEFAULT_VODS_IN_DIR_PATH)
     vods_directory = fields.CharField(default=DEFAULT_VODS_DIR_PATH)
     cods_directory = fields.CharField(default=DEFAULT_CODS_DIR_PATH)
+
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def get_host(self) -> str:
         return str(self.host)

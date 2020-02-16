@@ -4,6 +4,9 @@ import pyfastocloud_models.constants as constants
 
 
 class Url(EmbeddedMongoModel):
+    class Meta:
+        allow_inheritance = True
+
     _next_url_id = 0
 
     id = fields.IntegerField(default=lambda: Url.generate_id(), required=True)
@@ -21,9 +24,9 @@ class HttpProxy(EmbeddedMongoModel):
     DEFAULT_USER = str()
     DEFAULT_PASSWORD = str()
 
-    url = fields.CharField(default=INVALID_URL, required=True)
-    user = fields.CharField(default=DEFAULT_USER, required=False)
-    password = fields.CharField(default=DEFAULT_PASSWORD, required=False)
+    url = fields.CharField(default=INVALID_URL, required=True, blank=True)
+    user = fields.CharField(default=DEFAULT_USER, required=False, blank=True)
+    password = fields.CharField(default=DEFAULT_PASSWORD, required=False, blank=True)
 
     def is_valid(self):
         return self.url != HttpProxy.INVALID_URL
@@ -43,15 +46,6 @@ class OutputUrl(Url):
     hls_type = fields.IntegerField(default=constants.HlsType.HLS_PULL, required=False)
 
 
-# {"urls": [{"id": 81,"uri": "tcp://localhost:1935"}]}
-class InputUrls(EmbeddedMongoModel):
-    urls = fields.EmbeddedDocumentListField(InputUrl)
-
-
-class OutputUrls(EmbeddedMongoModel):
-    urls = fields.EmbeddedDocumentListField(OutputUrl)
-
-
 class Size(EmbeddedMongoModel):
     width = fields.IntegerField(default=constants.INVALID_WIDTH, required=True)
     height = fields.IntegerField(default=constants.INVALID_HEIGHT, required=True)
@@ -64,7 +58,7 @@ class Size(EmbeddedMongoModel):
 
 
 class Logo(EmbeddedMongoModel):
-    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True)
+    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True, blank=True)
     x = fields.IntegerField(default=constants.DEFAULT_LOGO_X, required=True)
     y = fields.IntegerField(default=constants.DEFAULT_LOGO_Y, required=True)
     alpha = fields.FloatField(default=constants.DEFAULT_LOGO_ALPHA, required=True)
@@ -79,7 +73,7 @@ class Logo(EmbeddedMongoModel):
 
 
 class RSVGLogo(EmbeddedMongoModel):
-    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True)
+    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True, blank=True)
     x = fields.IntegerField(default=constants.DEFAULT_LOGO_X, required=True)
     y = fields.IntegerField(default=constants.DEFAULT_LOGO_Y, required=True)
     size = fields.EmbeddedDocumentField(Size, default=Size())

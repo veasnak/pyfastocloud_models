@@ -6,9 +6,19 @@ import pyfastocloud_models.constants as constants
 
 
 class Serial(MongoModel):
+    class Meta:
+        collection_name = 'series'
+
     DEFAULT_SERIES_NAME = 'Serial'
     MIN_SERIES_NAME_LENGTH = 3
     MAX_SERIES_NAME_LENGTH = 30
+
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     created_date = fields.DateTimeField(default=datetime.now)  # for inner use
     name = fields.CharField(default=DEFAULT_SERIES_NAME, max_length=MAX_SERIES_NAME_LENGTH,

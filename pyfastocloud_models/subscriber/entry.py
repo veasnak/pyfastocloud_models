@@ -82,8 +82,8 @@ class Device(EmbeddedMongoModel):
     name = fields.CharField(default=DEFAULT_DEVICE_NAME, min_length=MIN_DEVICE_NAME_LENGTH,
                             max_length=MAX_DEVICE_NAME_LENGTH, required=True)
 
-    def get_id(self):
-        return str(self.id)
+    def get_id(self) -> str:
+        return str(self.pk)
 
     def to_dict(self) -> dict:
         return {Device.ID_FIELD: self.get_id(), Device.NAME_FIELD: self.name, Device.STATUS_FIELD: self.status,
@@ -102,8 +102,8 @@ class UserStream(EmbeddedMongoModel):
     interruption_time = fields.IntegerField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC,
                                             required=True)
 
-    def get_id(self):
-        return str(self.sid.id)
+    def get_id(self) -> str:
+        return str(self.pk)
 
     def to_dict(self) -> dict:
         res = self.sid.to_dict()
@@ -121,6 +121,10 @@ class UserStream(EmbeddedMongoModel):
 
 
 class Subscriber(MongoModel):
+    class Meta:
+        collection_name = 'subscribers'
+        allow_inheritance = True
+
     MAX_DATE = datetime(2100, 1, 1)
     ID_FIELD = 'id'
     EMAIL_FIELD = 'login'
@@ -158,6 +162,13 @@ class Subscriber(MongoModel):
     devices = fields.EmbeddedDocumentListField(Device, default=[])
     max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
     streams = fields.EmbeddedDocumentListField(UserStream, default=[])
+
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def created_date_utc_msec(self):
         return date_to_utc_msec(self.created_date)
