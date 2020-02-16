@@ -155,6 +155,14 @@ class IStream(MongoModel):
     parts = fields.ListField(fields.ReferenceField('IStream'), default=[])
     output = fields.EmbeddedDocumentListField(OutputUrl, default=[])  #
 
+    def output_dict(self) -> list:
+        result = []
+        for out in self.output:
+            out_dict = out.to_son().to_dict()
+            result.append(out_dict)
+
+        return result
+
     def add_part(self, stream):
         self.parts.append(stream)
         self.save()
@@ -197,7 +205,7 @@ class IStream(MongoModel):
         res = {
             ConfigFields.ID_FIELD: self.get_id(),  # required
             ConfigFields.TYPE_FIELD: self.get_type(),  # required
-            ConfigFields.OUTPUT_FIELD: self.output.to_mongo()  # required empty in timeshift_record
+            ConfigFields.OUTPUT_FIELD: self.output_dict()  # required empty in timeshift_record
         }
         return res
 
@@ -299,6 +307,14 @@ class HardwareStream(IStream):
     def __init__(self, *args, **kwargs):
         super(HardwareStream, self).__init__(*args, **kwargs)
 
+    def input_dict(self) -> list:
+        result = []
+        for inp in self.input:
+            out_dict = inp.to_son().to_dict()
+            result.append(out_dict)
+
+        return result
+
     def get_type(self):
         raise NotImplementedError('subclasses must override get_type()!')
 
@@ -359,7 +375,7 @@ class HardwareStream(IStream):
         conf[ConfigFields.HAVE_VIDEO_FIELD] = self.get_have_video()  # required
         conf[ConfigFields.HAVE_AUDIO_FIELD] = self.get_have_audio()  # required
         conf[ConfigFields.RESTART_ATTEMPTS_FIELD] = self.get_restart_attempts()
-        conf[ConfigFields.INPUT_FIELD] = self.input.to_mongo()  # required empty in timeshift_player
+        conf[ConfigFields.INPUT_FIELD] = self.input_dict()  # required empty in timeshift_player
 
         audio_select = self.get_audio_select()
         if audio_select != constants.INVALID_AUDIO_SELECT:
