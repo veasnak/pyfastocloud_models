@@ -1,12 +1,8 @@
-from mongoengine import Document, StringField
+from pymodm import MongoModel, fields
 
 import pyfastocloud_models.constants as constants
 
 
-class Epg(Document):
-    ID_FIELD = 'id'
-    URI_FIELD = 'uri'
-
-    meta = {'allow_inheritance': False, 'collection': 'epg', 'auto_create_index': False}
-    uri = StringField(default='http://0.0.0.0/epg.xml', max_length=constants.MAX_URL_LENGTH, required=True)
-    extension = StringField(max_length=5, required=False)
+class Epg(MongoModel):
+    uri = fields.CharField(default='http://0.0.0.0/epg.xml', max_length=constants.MAX_URL_LENGTH, required=True)
+    extension = fields.CharField(max_length=5, required=False)

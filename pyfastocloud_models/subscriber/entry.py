@@ -3,8 +3,7 @@ from hashlib import md5
 from bson.objectid import ObjectId
 from enum import IntEnum
 
-from mongoengine import Document, EmbeddedDocument, StringField, DateTimeField, IntField, ListField, ReferenceField, \
-    PULL, ObjectIdField, BooleanField, EmbeddedDocumentListField
+from pymodm import MongoModel, fields, EmbeddedMongoModel
 
 from pyfastocloud_models.service.entry import ServiceSettings
 from pyfastocloud_models.stream.entry import IStream
@@ -51,7 +50,7 @@ def for_subscribers_stream(stream: IStream):
     return is_vod_stream(stream) or is_live_stream(stream) or is_catchup(stream)
 
 
-class Device(EmbeddedDocument):
+class Device(EmbeddedMongoModel):
     ID_FIELD = 'id'
     NAME_FIELD = 'name'
     STATUS_FIELD = 'status'
@@ -77,12 +76,11 @@ class Device(EmbeddedDocument):
         def __str__(self):
             return str(self.value)
 
-    meta = {'auto_create_index': True}
-    id = ObjectIdField(required=True, default=ObjectId, unique=True, primary_key=True)
-    created_date = DateTimeField(default=datetime.now)
-    status = IntField(default=Status.NOT_ACTIVE)
-    name = StringField(default=DEFAULT_DEVICE_NAME, min_length=MIN_DEVICE_NAME_LENGTH,
-                       max_length=MAX_DEVICE_NAME_LENGTH, required=True)
+    id = fields.ObjectIdField(required=True, default=ObjectId, primary_key=True)
+    created_date = fields.DateTimeField(default=datetime.now)
+    status = fields.IntegerField(default=Status.NOT_ACTIVE)
+    name = fields.CharField(default=DEFAULT_DEVICE_NAME, min_length=MIN_DEVICE_NAME_LENGTH,
+                            max_length=MAX_DEVICE_NAME_LENGTH, required=True)
 
     def get_id(self):
         return str(self.id)
@@ -92,16 +90,17 @@ class Device(EmbeddedDocument):
                 Device.CREATED_DATE_FIELD: date_to_utc_msec(self.created_date)}
 
 
-class UserStream(EmbeddedDocument):
+class UserStream(EmbeddedMongoModel):
     FAVORITE_FIELD = 'favorite'
     PRIVATE_FIELD = 'private'
     RECENT_FIELD = 'recent'
 
-    sid = ReferenceField(IStream, required=True)
-    favorite = BooleanField(default=False)
-    private = BooleanField(default=False)
-    recent = DateTimeField(default=datetime.utcfromtimestamp(0))
-    interruption_time = IntField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
+    sid = fields.ReferenceField(IStream, required=True)
+    favorite = fields.BooleanField(default=False)
+    private = fields.BooleanField(default=False)
+    recent = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
+    interruption_time = fields.IntegerField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC,
+                                            required=True)
 
     def get_id(self):
         return str(self.sid.id)
@@ -121,7 +120,7 @@ class UserStream(EmbeddedDocument):
         return res
 
 
-class Subscriber(Document):
+class Subscriber(MongoModel):
     MAX_DATE = datetime(2100, 1, 1)
     ID_FIELD = 'id'
     EMAIL_FIELD = 'login'
@@ -145,22 +144,20 @@ class Subscriber(Document):
 
     SUBSCRIBER_HASH_LENGTH = 32
 
-    meta = {'allow_inheritance': True, 'collection': 'subscribers', 'auto_create_index': False}
+    email = fields.CharField(max_length=64, required=True)
+    first_name = fields.CharField(max_length=64, required=True)
+    last_name = fields.CharField(max_length=64, required=True)
+    password = fields.CharField(min_length=SUBSCRIBER_HASH_LENGTH, max_length=SUBSCRIBER_HASH_LENGTH, required=True)
+    created_date = fields.DateTimeField(default=datetime.now)
+    exp_date = fields.DateTimeField(default=MAX_DATE)
+    status = fields.IntegerField(default=Status.NOT_ACTIVE)
+    country = fields.CharField(min_length=2, max_length=3, required=True)
+    language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
 
-    email = StringField(max_length=64, required=True)
-    first_name = StringField(max_length=64, required=True)
-    last_name = StringField(max_length=64, required=True)
-    password = StringField(min_length=SUBSCRIBER_HASH_LENGTH, max_length=SUBSCRIBER_HASH_LENGTH, required=True)
-    created_date = DateTimeField(default=datetime.now)
-    exp_date = DateTimeField(default=MAX_DATE)
-    status = IntField(default=Status.NOT_ACTIVE)
-    country = StringField(min_length=2, max_length=3, required=True)
-    language = StringField(default=constants.DEFAULT_LOCALE, required=True)
-
-    servers = ListField(ReferenceField(ServiceSettings, reverse_delete_rule=PULL), default=[])
-    devices = EmbeddedDocumentListField(Device, default=[])
-    max_devices_count = IntField(default=constants.DEFAULT_DEVICES_COUNT)
-    streams = EmbeddedDocumentListField(UserStream, default=[])
+    servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
+    devices = fields.EmbeddedDocumentListField(Device, default=[])
+    max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
+    streams = fields.EmbeddedDocumentListField(UserStream, default=[])
 
     def created_date_utc_msec(self):
         return date_to_utc_msec(self.created_date)
@@ -312,9 +309,6 @@ class Subscriber(Document):
                     self._add_official_stream(stream)
                 else:
                     self.remove_official_stream(stream)
-
-    def delete(self, *args, **kwargs):
-        return Document.delete(self, *args, **kwargs)
 
     def delete_fake(self, *args, **kwargs):
         self.remove_all_own_streams()

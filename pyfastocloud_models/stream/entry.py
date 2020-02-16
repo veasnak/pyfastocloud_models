@@ -4,8 +4,7 @@ from urllib.parse import urlparse
 import os
 import json
 
-from mongoengine import StringField, IntField, EmbeddedDocumentField, Document, BooleanField, DateTimeField, FloatField, \
-    ListField, ReferenceField, PULL
+from pymodm import MongoModel, fields
 
 from pyfastocloud_models.utils.utils import date_to_utc_msec
 import pyfastocloud_models.constants as constants
@@ -129,30 +128,29 @@ class StreamLogLevel(IntEnum):
         return str(self.value)
 
 
-class IStream(Document):
-    meta = {'collection': 'streams', 'allow_inheritance': True, 'auto_create_index': True}
+class IStream(MongoModel):
+    created_date = fields.DateTimeField(default=datetime.now)  # for inner use
+    name = fields.CharField(default=constants.DEFAULT_STREAM_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
+                            min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)
+    group = fields.CharField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
+                             max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
+                             min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True)
 
-    created_date = DateTimeField(default=datetime.now)  # for inner use
-    name = StringField(default=constants.DEFAULT_STREAM_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
-                       min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)
-    group = StringField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
-                        max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
-                        min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True)
+    tvg_id = fields.CharField(default=constants.DEFAULT_STREAM_TVG_ID, max_length=constants.MAX_STREAM_TVG_ID_LENGTH,
+                              min_length=constants.MIN_STREAM_TVG_ID_LENGTH,
+                              required=True)
+    tvg_name = fields.CharField(default=constants.DEFAULT_STREAM_TVG_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
+                                min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)  #
+    tvg_logo = fields.CharField(default=constants.DEFAULT_STREAM_ICON_URL, max_length=constants.MAX_URL_LENGTH,
+                                min_length=constants.MIN_URL_LENGTH, required=True)  #
 
-    tvg_id = StringField(default=constants.DEFAULT_STREAM_TVG_ID, max_length=constants.MAX_STREAM_TVG_ID_LENGTH,
-                         min_length=constants.MIN_STREAM_TVG_ID_LENGTH,
-                         required=True)
-    tvg_name = StringField(default=constants.DEFAULT_STREAM_TVG_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
-                           min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)  #
-    tvg_logo = StringField(default=constants.DEFAULT_STREAM_ICON_URL, max_length=constants.MAX_URL_LENGTH,
-                           min_length=constants.MIN_URL_LENGTH, required=True)  #
+    price = fields.FloatField(default=0.0, min_value=constants.MIN_PRICE, max_value=constants.MAX_PRICE, required=True)
+    visible = fields.BooleanField(default=True, required=True)
+    iarc = fields.IntegerField(default=21, min_value=0,
+                               required=True)  # https://support.google.com/googleplay/answer/6209544
 
-    price = FloatField(default=0.0, min_value=constants.MIN_PRICE, max_value=constants.MAX_PRICE, required=True)
-    visible = BooleanField(default=True, required=True)
-    iarc = IntField(default=21, min_value=0, required=True)  # https://support.google.com/googleplay/answer/6209544
-
-    parts = ListField(ReferenceField('IStream', reverse_delete_rule=PULL), default=[])
-    output = EmbeddedDocumentField(OutputUrls, default=OutputUrls())  #
+    parts = fields.ListField(fields.ReferenceField('IStream'), default=[])
+    output = fields.EmbeddedDocumentField(OutputUrls, default=OutputUrls())  #
 
     def add_part(self, stream):
         self.parts.append(stream)
@@ -267,17 +265,17 @@ class ProxyStream(IStream):
 
 
 class HardwareStream(IStream):
-    log_level = IntField(default=StreamLogLevel.LOG_LEVEL_INFO, required=True)
+    log_level = fields.IntegerField(default=StreamLogLevel.LOG_LEVEL_INFO, required=True)
 
-    input = EmbeddedDocumentField(InputUrls, default=InputUrls())
-    have_video = BooleanField(default=constants.DEFAULT_HAVE_VIDEO, required=True)
-    have_audio = BooleanField(default=constants.DEFAULT_HAVE_AUDIO, required=True)
-    audio_select = IntField(default=constants.INVALID_AUDIO_SELECT, required=True)
-    loop = BooleanField(default=constants.DEFAULT_LOOP, required=True)
-    avformat = BooleanField(default=constants.DEFAULT_AVFORMAT, required=True)
-    restart_attempts = IntField(default=constants.DEFAULT_RESTART_ATTEMPTS, required=True)
-    auto_exit_time = IntField(default=constants.DEFAULT_AUTO_EXIT_TIME, required=True)
-    extra_config_fields = StringField(default='')
+    input = fields.EmbeddedDocumentField(InputUrls, default=InputUrls())
+    have_video = fields.BooleanField(default=constants.DEFAULT_HAVE_VIDEO, required=True)
+    have_audio = fields.BooleanField(default=constants.DEFAULT_HAVE_AUDIO, required=True)
+    audio_select = fields.IntegerField(default=constants.INVALID_AUDIO_SELECT, required=True)
+    loop = fields.BooleanField(default=constants.DEFAULT_LOOP, required=True)
+    avformat = fields.BooleanField(default=constants.DEFAULT_AVFORMAT, required=True)
+    restart_attempts = fields.IntegerField(default=constants.DEFAULT_RESTART_ATTEMPTS, required=True)
+    auto_exit_time = fields.IntegerField(default=constants.DEFAULT_AUTO_EXIT_TIME, required=True)
+    extra_config_fields = fields.CharField(default='')
 
     # runtime
     _status = StreamStatus.NEW
@@ -482,8 +480,8 @@ class RelayStream(HardwareStream):
     def __init__(self, *args, **kwargs):
         super(RelayStream, self).__init__(*args, **kwargs)
 
-    video_parser = StringField(default=constants.DEFAULT_VIDEO_PARSER, required=True)
-    audio_parser = StringField(default=constants.DEFAULT_AUDIO_PARSER, required=True)
+    video_parser = fields.CharField(default=constants.DEFAULT_VIDEO_PARSER, required=True)
+    audio_parser = fields.CharField(default=constants.DEFAULT_AUDIO_PARSER, required=True)
 
     def get_type(self):
         return constants.StreamType.RELAY
@@ -516,20 +514,20 @@ class EncodeStream(HardwareStream):
     def __init__(self, *args, **kwargs):
         super(EncodeStream, self).__init__(*args, **kwargs)
 
-    relay_video = BooleanField(default=constants.DEFAULT_RELAY_VIDEO, required=True)
-    relay_audio = BooleanField(default=constants.DEFAULT_RELAY_AUDIO, required=True)
-    deinterlace = BooleanField(default=constants.DEFAULT_DEINTERLACE, required=True)
-    frame_rate = IntField(default=constants.INVALID_FRAME_RATE, required=True)
-    volume = FloatField(default=constants.DEFAULT_VOLUME, required=True)
-    video_codec = StringField(default=constants.DEFAULT_VIDEO_CODEC, required=True)
-    audio_codec = StringField(default=constants.DEFAULT_AUDIO_CODEC, required=True)
-    audio_channels_count = IntField(default=constants.INVALID_AUDIO_CHANNELS_COUNT, required=True)
-    size = EmbeddedDocumentField(Size, default=Size())
-    video_bit_rate = IntField(default=constants.INVALID_VIDEO_BIT_RATE, required=True)
-    audio_bit_rate = IntField(default=constants.INVALID_AUDIO_BIT_RATE, required=True)
-    logo = EmbeddedDocumentField(Logo, default=Logo())
-    rsvg_logo = EmbeddedDocumentField(RSVGLogo, default=RSVGLogo())
-    aspect_ratio = EmbeddedDocumentField(Rational, default=Rational())
+    relay_video = fields.BooleanField(default=constants.DEFAULT_RELAY_VIDEO, required=True)
+    relay_audio = fields.BooleanField(default=constants.DEFAULT_RELAY_AUDIO, required=True)
+    deinterlace = fields.BooleanField(default=constants.DEFAULT_DEINTERLACE, required=True)
+    frame_rate = fields.IntegerField(default=constants.INVALID_FRAME_RATE, required=True)
+    volume = fields.FloatField(default=constants.DEFAULT_VOLUME, required=True)
+    video_codec = fields.CharField(default=constants.DEFAULT_VIDEO_CODEC, required=True)
+    audio_codec = fields.CharField(default=constants.DEFAULT_AUDIO_CODEC, required=True)
+    audio_channels_count = fields.IntegerField(default=constants.INVALID_AUDIO_CHANNELS_COUNT, required=True)
+    size = fields.EmbeddedDocumentField(Size, default=Size())
+    video_bit_rate = fields.IntegerField(default=constants.INVALID_VIDEO_BIT_RATE, required=True)
+    audio_bit_rate = fields.IntegerField(default=constants.INVALID_AUDIO_BIT_RATE, required=True)
+    logo = fields.EmbeddedDocumentField(Logo, default=Logo())
+    rsvg_logo = fields.EmbeddedDocumentField(RSVGLogo, default=RSVGLogo())
+    aspect_ratio = fields.EmbeddedDocumentField(Rational, default=Rational())
 
     def get_type(self):
         return constants.StreamType.ENCODE
@@ -612,8 +610,8 @@ class TimeshiftRecorderStream(RelayStream):
     def __init__(self, *args, **kwargs):
         super(TimeshiftRecorderStream, self).__init__(*args, **kwargs)
 
-    timeshift_chunk_duration = IntField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
-    timeshift_chunk_life_time = IntField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
+    timeshift_chunk_duration = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
+    timeshift_chunk_life_time = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
 
     def get_type(self):
         return constants.StreamType.TIMESHIFT_RECORDER
@@ -644,8 +642,8 @@ class TimeshiftRecorderStream(RelayStream):
 
 
 class CatchupStream(TimeshiftRecorderStream):
-    start = DateTimeField(default=datetime.utcfromtimestamp(0))
-    stop = DateTimeField(default=datetime.utcfromtimestamp(0))
+    start = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
+    stop = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
 
     def __init__(self, *args, **kwargs):
         super(CatchupStream, self).__init__(*args, **kwargs)
@@ -679,8 +677,8 @@ class CatchupStream(TimeshiftRecorderStream):
 
 
 class TimeshiftPlayerStream(RelayStream):
-    timeshift_dir = StringField(required=True)  # FIXME default
-    timeshift_delay = IntField(default=constants.DEFAULT_TIMESHIFT_DELAY, required=True)
+    timeshift_dir = fields.CharField(required=True)  # FIXME default
+    timeshift_delay = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_DELAY, required=True)
 
     def __init__(self, *args, **kwargs):
         super(TimeshiftPlayerStream, self).__init__(*args, **kwargs)
@@ -780,17 +778,17 @@ class VodBasedStream:
     MAX_DATE = datetime(2100, 1, 1)
     MIN_DATE = datetime(1970, 1, 1)
     DEFAULT_COUNTRY = 'Unknown'
-    vod_type = IntField(default=constants.VodType.VODS, required=True)
-    description = StringField(default=constants.DEFAULT_STREAM_DESCRIPTION,
-                              min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
-                              max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
-                              required=True)
-    trailer_url = StringField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
-                              min_length=constants.MIN_URL_LENGTH, required=True)
-    user_score = FloatField(default=0, min_value=0, max_value=100, required=True)
-    prime_date = DateTimeField(default=MIN_DATE, min_value=MIN_DATE, max_value=MAX_DATE, required=True)
-    country = StringField(default=DEFAULT_COUNTRY, required=True)
-    duration = IntField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
+    vod_type = fields.IntegerField(default=constants.VodType.VODS, required=True)
+    description = fields.CharField(default=constants.DEFAULT_STREAM_DESCRIPTION,
+                                   min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
+                                   max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
+                                   required=True)
+    trailer_url = fields.CharField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
+                                   min_length=constants.MIN_URL_LENGTH, required=True)
+    user_score = fields.FloatField(default=0, min_value=0, max_value=100, required=True)
+    prime_date = fields.DateTimeField(default=MIN_DATE, required=True)
+    country = fields.CharField(default=DEFAULT_COUNTRY, required=True)
+    duration = fields.IntegerField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
 
     def to_dict(self) -> dict:
         return {VodFields.DESCRIPTION_FIELD: self.description,
@@ -889,3 +887,6 @@ class EventStream(VodEncodeStream):
         stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
         stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
         return stream
+
+
+IStream.register_delete_rule(IStream, 'IStream.parts', fields.ReferenceField.PULL)
