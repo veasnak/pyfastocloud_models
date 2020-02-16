@@ -157,10 +157,10 @@ class Subscriber(Document):
     country = StringField(min_length=2, max_length=3, required=True)
     language = StringField(default=constants.DEFAULT_LOCALE, required=True)
 
-    servers = ListField(ReferenceField(ServiceSettings, reverse_delete_rule=PULL), unique=True, default=[])
-    devices = EmbeddedDocumentListField(Device, unique=True, default=[])
+    servers = ListField(ReferenceField(ServiceSettings, reverse_delete_rule=PULL), default=[])
+    devices = EmbeddedDocumentListField(Device, default=[])
     max_devices_count = IntField(default=constants.DEFAULT_DEVICES_COUNT)
-    streams = EmbeddedDocumentListField(UserStream, unique=True, default=[])
+    streams = EmbeddedDocumentListField(UserStream, default=[])
 
     def created_date_utc_msec(self):
         return date_to_utc_msec(self.created_date)
@@ -204,20 +204,27 @@ class Subscriber(Document):
         user_stream = UserStream(sid=oid)
         self.add_official_stream(user_stream)
 
-    def add_official_stream(self, stream: UserStream):
-        db_stream = stream.sid
-        self._add_official_stream(db_stream)
+    def add_official_stream(self, user_stream: UserStream):
+        found_streams = self.streams.filter(sid=user_stream.sid)
+        if not found_streams:
+            self.streams.append(user_stream)
+            self.streams.save()
 
     def _add_official_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
-        self.streams.append(user_stream)
-        self.streams.save()
+        self.add_official_stream(user_stream)
 
-    def add_own_stream(self, stream: IStream):
+    def add_own_stream(self, user_stream: UserStream):
+        found_streams = self.streams.filter(sid=user_stream.sid)
+        if not found_streams:
+            user_stream.private = True
+            self.streams.append(user_stream)
+            self.streams.save()
+
+    def _add_own_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         user_stream.private = True
-        self.streams.append(user_stream)
-        self.streams.save()
+        self.add_own_stream(user_stream)
 
     def remove_official_stream(self, stream: IStream):
         streams = self.streams.filter(sid=stream)
@@ -283,8 +290,7 @@ class Subscriber(Document):
         return streams
 
     def select_all_streams(self, select: bool):
-        ostreams = self.all_available_official_streams()
-        for stream in ostreams:
+        for stream in self.all_available_official_streams():
             if is_live_stream(stream):
                 if select:
                     self._add_official_stream(stream)
@@ -292,8 +298,7 @@ class Subscriber(Document):
                     self.remove_official_stream(stream)
 
     def select_all_vods(self, select: bool):
-        ostreams = self.all_available_official_vods()
-        for stream in ostreams:
+        for stream in self.all_available_official_vods():
             if is_vod_stream(stream):
                 if select:
                     self._add_official_stream(stream)
@@ -301,8 +306,7 @@ class Subscriber(Document):
                     self.remove_official_stream(stream)
 
     def select_all_catchups(self, select: bool):
-        ostreams = self.all_available_official_catchups()
-        for stream in ostreams:
+        for stream in self.all_available_official_catchups():
             if is_catchup(stream):
                 if select:
                     self._add_official_stream(stream)
