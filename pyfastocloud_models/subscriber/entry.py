@@ -209,19 +209,15 @@ class Subscriber(Document):
         self._add_official_stream(db_stream)
 
     def _add_official_stream(self, stream: IStream):
-        found_streams = self.streams.filter(sid=stream)
-        if not found_streams:
-            user_stream = UserStream(sid=stream.id)
-            self.streams.append(user_stream)
-            self.streams.save()
+        user_stream = UserStream(sid=stream.id)
+        self.streams.append(user_stream)
+        self.streams.save()
 
     def add_own_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         user_stream.private = True
-        found_streams = self.streams.filter(sid=stream)
-        if not found_streams:
-            self.streams.append(user_stream)
-            self.streams.save()
+        self.streams.append(user_stream)
+        self.streams.save()
 
     def remove_official_stream(self, stream: IStream):
         streams = self.streams.filter(sid=stream)
