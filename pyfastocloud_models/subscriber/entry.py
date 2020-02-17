@@ -83,7 +83,7 @@ class Device(EmbeddedMongoModel):
                             max_length=MAX_DEVICE_NAME_LENGTH, required=True)
 
     def get_id(self) -> str:
-        return str(self.pk)
+        return str(self.id)
 
     def to_dict(self) -> dict:
         return {Device.ID_FIELD: self.get_id(), Device.NAME_FIELD: self.name, Device.STATUS_FIELD: self.status,
