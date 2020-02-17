@@ -268,10 +268,10 @@ class Subscriber(MongoModel):
         return IStream.objects(id=sid).first()
 
     def official_streams(self):
-        return self.streams.filter(private=False)
+        return self.streams
 
     def own_streams(self):
-        return self.streams.filter(private=True)
+        return self.streams
 
     def all_available_servers(self):
         return self.servers
