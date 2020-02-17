@@ -218,17 +218,18 @@ class Subscriber(MongoModel):
         user_stream = UserStream(sid=oid)
         self.add_official_stream(user_stream)
 
-    def add_official_stream(self, user_stream: UserStream):
+    def add_official_stream(self, user_stream: UserStream, save=True):
         for stream in self.streams:
             if not stream.private and stream.sid == user_stream.sid:
                 return
 
         self.streams.append(user_stream)
-        self.save()
+        if save:
+            self.save()
 
-    def _add_official_stream(self, stream: IStream):
+    def _add_official_stream(self, stream: IStream, save=True):
         user_stream = UserStream(sid=stream.id)
-        self.add_official_stream(user_stream)
+        self.add_official_stream(user_stream, save)
 
     def add_own_stream(self, user_stream: UserStream):
         for stream in self.streams:
@@ -244,14 +245,17 @@ class Subscriber(MongoModel):
         user_stream.private = True
         self.add_own_stream(user_stream)
 
-    def remove_official_stream(self, ostream: IStream):
+    def remove_official_stream(self, ostream: IStream, save=True):
         if not ostream:
             return
 
-        for stream in self.streams:
+        copy = list(self.streams)
+        for stream in copy:
             if not stream.private and stream.sid == ostream:
                 self.streams.remove(stream)
-        self.save()
+
+        if save:
+            self.save()
 
     def remove_official_stream_by_id(self, sid: ObjectId):
         original_stream = IStream.get_stream_by_id(sid)
@@ -326,28 +330,31 @@ class Subscriber(MongoModel):
         return streams
 
     def select_all_streams(self, select: bool):
-        for stream in self.all_available_official_streams():
-            if is_live_stream(stream):
+        for istream in self.all_available_official_streams():
+            if is_live_stream(istream):
                 if select:
-                    self._add_official_stream(stream)
+                    self._add_official_stream(istream, False)
                 else:
-                    self.remove_official_stream(stream)
+                    self.remove_official_stream(istream, False)
+        self.save()
 
     def select_all_vods(self, select: bool):
         for stream in self.all_available_official_vods():
             if is_vod_stream(stream):
                 if select:
-                    self._add_official_stream(stream)
+                    self._add_official_stream(stream, False)
                 else:
-                    self.remove_official_stream(stream)
+                    self.remove_official_stream(stream, False)
+        self.save()
 
     def select_all_catchups(self, select: bool):
         for stream in self.all_available_official_catchups():
             if is_catchup(stream):
                 if select:
-                    self._add_official_stream(stream)
+                    self._add_official_stream(stream, False)
                 else:
-                    self.remove_official_stream(stream)
+                    self.remove_official_stream(stream, False)
+        self.save()
 
     def delete_fake(self, *args, **kwargs):
         self.remove_all_own_streams()
