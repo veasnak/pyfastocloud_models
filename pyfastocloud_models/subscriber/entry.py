@@ -219,59 +219,79 @@ class Subscriber(MongoModel):
         self.add_official_stream(user_stream)
 
     def add_official_stream(self, user_stream: UserStream):
-        found_streams = self.streams.filter(sid=user_stream.sid)
-        if not found_streams:
-            self.streams.append(user_stream)
-            self.streams.save()
+        for stream in self.streams:
+            if not stream.private and stream.sid == user_stream:
+                return
+
+        self.streams.append(user_stream)
+        self.save()
 
     def _add_official_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         self.add_official_stream(user_stream)
 
     def add_own_stream(self, user_stream: UserStream):
-        found_streams = self.streams.filter(sid=user_stream.sid)
-        if not found_streams:
-            user_stream.private = True
-            self.streams.append(user_stream)
-            self.streams.save()
+        for stream in self.streams:
+            if stream.private and stream.sid == user_stream:
+                return
+
+        user_stream.private = True
+        self.streams.append(user_stream)
+        self.save()
 
     def _add_own_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         user_stream.private = True
         self.add_own_stream(user_stream)
 
-    def remove_official_stream(self, stream: IStream):
-        streams = self.streams.filter(sid=stream)
-        streams.delete()
-        self.streams.save()
+    def remove_official_stream(self, ostream: IStream):
+        for stream in self.streams:
+            if not stream.private and stream.sid == ostream:
+                self.streams.remove(stream)
+                break
+        self.save()
 
     def remove_official_stream_by_id(self, sid: ObjectId):
-        original_stream = IStream.objects(id=sid).first()
+        original_stream = IStream.objects.get({'id': sid})
         self.remove_official_stream(original_stream)
 
     def remove_own_stream_by_id(self, sid: ObjectId):
-        stream = IStream.objects(id=sid).first()
-        streams = self.streams.filter(sid=stream, private=True)
-        for stream in streams:
-            stream.sid.delete()
-        streams.delete()
-        self.streams.save()
+        stream = IStream.objects.get({'id': sid})
+        if stream:
+            for stream in self.streams:
+                if stream.sid == sid:
+                    self.stream.remove(stream)
+            stream.delete()
+            self.save()
 
     def remove_all_own_streams(self):
-        streams = self.streams.filter(private=True)
-        for stream in streams:
-            stream.sid.delete()
-        streams.delete()
-        self.streams.save()
+        for stream in self.streams:
+            if stream.private:
+                self.streams.remove(stream)
+        self.save()
 
     def find_own_stream(self, sid: ObjectId):
-        return IStream.objects(id=sid).first()
+        for stream in self.streams:
+            if stream.id == sid:
+                return stream
+
+        return None
 
     def official_streams(self):
-        return self.streams
+        streams = []
+        for stream in self.streams:
+            if not stream.private:
+                streams.append(stream)
+
+        return streams
 
     def own_streams(self):
-        return self.streams
+        streams = []
+        for stream in self.streams:
+            if stream.private:
+                streams.append(stream)
+
+        return streams
 
     def all_available_servers(self):
         return self.servers
