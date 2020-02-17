@@ -22,7 +22,7 @@ class Provider(MongoModel):
         collection_name = 'providers'
         allow_inheritance = True
 
-    email = fields.CharField(max_length=64, required=True)
+    email = fields.CharField(max_length=64, required=True, primary_key=True)
     password = fields.CharField(required=True)
     created_date = fields.DateTimeField(default=datetime.now)
     status = fields.IntegerField(default=Status.NO_ACTIVE)

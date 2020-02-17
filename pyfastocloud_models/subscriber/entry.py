@@ -148,7 +148,7 @@ class Subscriber(MongoModel):
 
     SUBSCRIBER_HASH_LENGTH = 32
 
-    email = fields.CharField(max_length=64, required=True)
+    email = fields.CharField(max_length=64, required=True, primary_key=True)
     first_name = fields.CharField(max_length=64, required=True)
     last_name = fields.CharField(max_length=64, required=True)
     password = fields.CharField(min_length=SUBSCRIBER_HASH_LENGTH, max_length=SUBSCRIBER_HASH_LENGTH, required=True)
@@ -183,12 +183,12 @@ class Subscriber(MongoModel):
     def add_device(self, device: Device):
         if len(self.devices) < self.max_devices_count:
             self.devices.append(device)
-            self.devices.save()
+            self.save()
 
     def remove_device(self, sid: ObjectId):
         devices = self.devices.filter(id=sid)
         devices.delete()
-        self.devices.save()
+        self.save()
 
     def find_device(self, sid: ObjectId):
         devices = self.devices.filter(id=sid)
