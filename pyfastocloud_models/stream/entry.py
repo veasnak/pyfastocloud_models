@@ -4,13 +4,12 @@ from urllib.parse import urlparse
 import os
 import json
 
-from mongoengine import StringField, IntField, EmbeddedDocumentField, Document, BooleanField, DateTimeField, FloatField, \
-    ListField, ReferenceField, PULL
+from pymodm import MongoModel, fields, EmbeddedMongoModel
+from bson.objectid import ObjectId
 
 from pyfastocloud_models.utils.utils import date_to_utc_msec
 import pyfastocloud_models.constants as constants
-from pyfastocloud_models.common_entries import Rational, Size, Logo, RSVGLogo, InputUrls, InputUrl, OutputUrls, \
-    OutputUrl
+from pyfastocloud_models.common_entries import Rational, Size, Logo, RSVGLogo, InputUrl, OutputUrl
 
 
 class ConfigFields:
@@ -129,30 +128,50 @@ class StreamLogLevel(IntEnum):
         return str(self.value)
 
 
-class IStream(Document):
-    meta = {'collection': 'streams', 'allow_inheritance': True, 'auto_create_index': True}
+class IStream(MongoModel):
+    @staticmethod
+    def get_stream_by_id(sid: ObjectId):
+        try:
+            stream = IStream.objects.get({'_id': sid})
+        except IStream.DoesNotExist:
+            return None
+        else:
+            return stream
 
-    created_date = DateTimeField(default=datetime.now)  # for inner use
-    name = StringField(default=constants.DEFAULT_STREAM_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
-                       min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)
-    group = StringField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
-                        max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
-                        min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True)
+    class Meta:
+        collection_name = 'streams'
+        allow_inheritance = True
 
-    tvg_id = StringField(default=constants.DEFAULT_STREAM_TVG_ID, max_length=constants.MAX_STREAM_TVG_ID_LENGTH,
-                         min_length=constants.MIN_STREAM_TVG_ID_LENGTH,
-                         required=True)
-    tvg_name = StringField(default=constants.DEFAULT_STREAM_TVG_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
-                           min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)  #
-    tvg_logo = StringField(default=constants.DEFAULT_STREAM_ICON_URL, max_length=constants.MAX_URL_LENGTH,
-                           min_length=constants.MIN_URL_LENGTH, required=True)  #
+    created_date = fields.DateTimeField(default=datetime.now)  # for inner use
+    name = fields.CharField(default=constants.DEFAULT_STREAM_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
+                            min_length=constants.MIN_STREAM_NAME_LENGTH, required=True)
+    group = fields.CharField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
+                             max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
+                             min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True, blank=True)
 
-    price = FloatField(default=0.0, min_value=constants.MIN_PRICE, max_value=constants.MAX_PRICE, required=True)
-    visible = BooleanField(default=True, required=True)
-    iarc = IntField(default=21, min_value=0, required=True)  # https://support.google.com/googleplay/answer/6209544
+    tvg_id = fields.CharField(default=constants.DEFAULT_STREAM_TVG_ID, max_length=constants.MAX_STREAM_TVG_ID_LENGTH,
+                              min_length=constants.MIN_STREAM_TVG_ID_LENGTH,
+                              required=True, blank=True)
+    tvg_name = fields.CharField(default=constants.DEFAULT_STREAM_TVG_NAME, max_length=constants.MAX_STREAM_NAME_LENGTH,
+                                min_length=constants.MIN_STREAM_NAME_LENGTH, required=True, blank=True)  #
+    tvg_logo = fields.CharField(default=constants.DEFAULT_STREAM_ICON_URL, max_length=constants.MAX_URL_LENGTH,
+                                min_length=constants.MIN_URL_LENGTH, required=True)  #
 
-    parts = ListField(ReferenceField('IStream', reverse_delete_rule=PULL), default=[])
-    output = EmbeddedDocumentField(OutputUrls, default=OutputUrls())  #
+    price = fields.FloatField(default=0.0, min_value=constants.MIN_PRICE, max_value=constants.MAX_PRICE, required=True)
+    visible = fields.BooleanField(default=True, required=True)
+    iarc = fields.IntegerField(default=21, min_value=0,
+                               required=True)  # https://support.google.com/googleplay/answer/6209544
+
+    parts = fields.ListField(fields.ReferenceField('IStream'), default=[])
+    output = fields.EmbeddedDocumentListField(OutputUrl, default=[])  #
+
+    def output_dict(self) -> list:
+        result = []
+        for out in self.output:
+            out_dict = out.to_son().to_dict()
+            result.append(out_dict)
+
+        return result
 
     def add_part(self, stream):
         self.parts.append(stream)
@@ -185,14 +204,18 @@ class IStream(Document):
     def get_type(self):
         raise NotImplementedError('subclasses must override get_type()!')
 
+    @property
+    def id(self):
+        return self.pk
+
     def get_id(self) -> str:
-        return str(self.id)
+        return str(self.pk)
 
     def config(self) -> dict:
         res = {
             ConfigFields.ID_FIELD: self.get_id(),  # required
             ConfigFields.TYPE_FIELD: self.get_type(),  # required
-            ConfigFields.OUTPUT_FIELD: self.output.to_mongo()  # required empty in timeshift_record
+            ConfigFields.OUTPUT_FIELD: self.output_dict()  # required empty in timeshift_record
         }
         return res
 
@@ -211,7 +234,7 @@ class IStream(Document):
                 stream_type == constants.StreamType.PROXY or stream_type == constants.StreamType.VOD_PROXY or \
                 stream_type == constants.StreamType.VOD_ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or stream_type == constants.StreamType.CATCHUP:
-            for out in self.output.urls:
+            for out in self.output:
                 result += '#EXTINF:-1 tvg-id="{0}" tvg-name="{1}" tvg-logo="{2}" group-title="{3}",{4}\n{5}\n'.format(
                     self.tvg_id, self.tvg_name, self.tvg_logo, self.group, self.name, out.uri)
 
@@ -227,7 +250,7 @@ class IStream(Document):
                 stream_type == constants.StreamType.PROXY or stream_type == constants.StreamType.VOD_PROXY or \
                 stream_type == constants.StreamType.VOD_ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or stream_type == constants.StreamType.CATCHUP:
-            for out in self.output.urls:
+            for out in self.output:
                 parsed_uri = urlparse(out.uri)
                 if parsed_uri.scheme == 'http' or parsed_uri.scheme == 'https':
                     file_name = os.path.basename(parsed_uri.path)
@@ -262,22 +285,22 @@ class ProxyStream(IStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
 class HardwareStream(IStream):
-    log_level = IntField(default=StreamLogLevel.LOG_LEVEL_INFO, required=True)
+    log_level = fields.IntegerField(default=StreamLogLevel.LOG_LEVEL_INFO, required=True)
 
-    input = EmbeddedDocumentField(InputUrls, default=InputUrls())
-    have_video = BooleanField(default=constants.DEFAULT_HAVE_VIDEO, required=True)
-    have_audio = BooleanField(default=constants.DEFAULT_HAVE_AUDIO, required=True)
-    audio_select = IntField(default=constants.INVALID_AUDIO_SELECT, required=True)
-    loop = BooleanField(default=constants.DEFAULT_LOOP, required=True)
-    avformat = BooleanField(default=constants.DEFAULT_AVFORMAT, required=True)
-    restart_attempts = IntField(default=constants.DEFAULT_RESTART_ATTEMPTS, required=True)
-    auto_exit_time = IntField(default=constants.DEFAULT_AUTO_EXIT_TIME, required=True)
-    extra_config_fields = StringField(default='')
+    input = fields.EmbeddedDocumentListField(InputUrl, default=[])
+    have_video = fields.BooleanField(default=constants.DEFAULT_HAVE_VIDEO, required=True)
+    have_audio = fields.BooleanField(default=constants.DEFAULT_HAVE_AUDIO, required=True)
+    audio_select = fields.IntegerField(default=constants.INVALID_AUDIO_SELECT, required=True)
+    loop = fields.BooleanField(default=constants.DEFAULT_LOOP, required=True)
+    avformat = fields.BooleanField(default=constants.DEFAULT_AVFORMAT, required=True)
+    restart_attempts = fields.IntegerField(default=constants.DEFAULT_RESTART_ATTEMPTS, required=True)
+    auto_exit_time = fields.IntegerField(default=constants.DEFAULT_AUTO_EXIT_TIME, required=True)
+    extra_config_fields = fields.CharField(default='', blank=True)
 
     # runtime
     _status = StreamStatus.NEW
@@ -293,6 +316,14 @@ class HardwareStream(IStream):
 
     def __init__(self, *args, **kwargs):
         super(HardwareStream, self).__init__(*args, **kwargs)
+
+    def input_dict(self) -> list:
+        result = []
+        for inp in self.input:
+            out_dict = inp.to_son().to_dict()
+            result.append(out_dict)
+
+        return result
 
     def get_type(self):
         raise NotImplementedError('subclasses must override get_type()!')
@@ -354,7 +385,7 @@ class HardwareStream(IStream):
         conf[ConfigFields.HAVE_VIDEO_FIELD] = self.get_have_video()  # required
         conf[ConfigFields.HAVE_AUDIO_FIELD] = self.get_have_audio()  # required
         conf[ConfigFields.RESTART_ATTEMPTS_FIELD] = self.get_restart_attempts()
-        conf[ConfigFields.INPUT_FIELD] = self.input.to_mongo()  # required empty in timeshift_player
+        conf[ConfigFields.INPUT_FIELD] = self.input_dict()  # required empty in timeshift_player
 
         audio_select = self.get_audio_select()
         if audio_select != constants.INVALID_AUDIO_SELECT:
@@ -420,7 +451,7 @@ class HardwareStream(IStream):
         if stream_type == constants.StreamType.RELAY or stream_type == constants.StreamType.ENCODE or \
                 stream_type == constants.StreamType.TIMESHIFT_PLAYER or \
                 stream_type == constants.StreamType.VOD_ENCODE or stream_type == constants.StreamType.VOD_RELAY:
-            for out in self.input.urls:
+            for out in self.input:
                 result += '#EXTINF:-1 tvg-id="{0}" tvg-name="{1}" tvg-logo="{2}" group-title="{3}",{4}\n{5}\n'.format(
                     self.tvg_id, self.tvg_name, self.tvg_logo, self.group, self.name, out.uri)
 
@@ -430,8 +461,8 @@ class HardwareStream(IStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
     # private
@@ -445,7 +476,7 @@ class HardwareStream(IStream):
         return '{0}/{1}/{2}/{3}'.format(self._settings.cods_directory, self.get_type(), self.get_id(), oid)
 
     def _fixup_http_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -453,10 +484,10 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_http_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_http_link(val.hls_type, filename, val.id)
 
     def _fixup_vod_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -464,10 +495,10 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_vod_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_vod_link(val.hls_type, filename, val.id)
 
     def _fixup_cod_output_urls(self):
-        for idx, val in enumerate(self.output.urls):
+        for idx, val in enumerate(self.output):
             url = val.uri
             if url == constants.DEFAULT_TEST_URL:
                 return
@@ -475,15 +506,15 @@ class HardwareStream(IStream):
             parsed_uri = urlparse(url)
             if parsed_uri.scheme == 'http':
                 filename = os.path.basename(parsed_uri.path)
-                self.output.urls[idx] = self.generate_cod_link(val.hls_type, filename, val.id)
+                self.output[idx] = self.generate_cod_link(val.hls_type, filename, val.id)
 
 
 class RelayStream(HardwareStream):
     def __init__(self, *args, **kwargs):
         super(RelayStream, self).__init__(*args, **kwargs)
 
-    video_parser = StringField(default=constants.DEFAULT_VIDEO_PARSER, required=True)
-    audio_parser = StringField(default=constants.DEFAULT_AUDIO_PARSER, required=True)
+    video_parser = fields.CharField(default=constants.DEFAULT_VIDEO_PARSER, required=True)
+    audio_parser = fields.CharField(default=constants.DEFAULT_AUDIO_PARSER, required=True)
 
     def get_type(self):
         return constants.StreamType.RELAY
@@ -507,8 +538,8 @@ class RelayStream(HardwareStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -516,20 +547,20 @@ class EncodeStream(HardwareStream):
     def __init__(self, *args, **kwargs):
         super(EncodeStream, self).__init__(*args, **kwargs)
 
-    relay_video = BooleanField(default=constants.DEFAULT_RELAY_VIDEO, required=True)
-    relay_audio = BooleanField(default=constants.DEFAULT_RELAY_AUDIO, required=True)
-    deinterlace = BooleanField(default=constants.DEFAULT_DEINTERLACE, required=True)
-    frame_rate = IntField(default=constants.INVALID_FRAME_RATE, required=True)
-    volume = FloatField(default=constants.DEFAULT_VOLUME, required=True)
-    video_codec = StringField(default=constants.DEFAULT_VIDEO_CODEC, required=True)
-    audio_codec = StringField(default=constants.DEFAULT_AUDIO_CODEC, required=True)
-    audio_channels_count = IntField(default=constants.INVALID_AUDIO_CHANNELS_COUNT, required=True)
-    size = EmbeddedDocumentField(Size, default=Size())
-    video_bit_rate = IntField(default=constants.INVALID_VIDEO_BIT_RATE, required=True)
-    audio_bit_rate = IntField(default=constants.INVALID_AUDIO_BIT_RATE, required=True)
-    logo = EmbeddedDocumentField(Logo, default=Logo())
-    rsvg_logo = EmbeddedDocumentField(RSVGLogo, default=RSVGLogo())
-    aspect_ratio = EmbeddedDocumentField(Rational, default=Rational())
+    relay_video = fields.BooleanField(default=constants.DEFAULT_RELAY_VIDEO, required=True)
+    relay_audio = fields.BooleanField(default=constants.DEFAULT_RELAY_AUDIO, required=True)
+    deinterlace = fields.BooleanField(default=constants.DEFAULT_DEINTERLACE, required=True)
+    frame_rate = fields.IntegerField(default=constants.INVALID_FRAME_RATE, required=True)
+    volume = fields.FloatField(default=constants.DEFAULT_VOLUME, required=True)
+    video_codec = fields.CharField(default=constants.DEFAULT_VIDEO_CODEC, required=True)
+    audio_codec = fields.CharField(default=constants.DEFAULT_AUDIO_CODEC, required=True)
+    audio_channels_count = fields.IntegerField(default=constants.INVALID_AUDIO_CHANNELS_COUNT, required=True)
+    size = fields.EmbeddedDocumentField(Size, default=Size())
+    video_bit_rate = fields.IntegerField(default=constants.INVALID_VIDEO_BIT_RATE, required=True)
+    audio_bit_rate = fields.IntegerField(default=constants.INVALID_AUDIO_BIT_RATE, required=True)
+    logo = fields.EmbeddedDocumentField(Logo, default=Logo())
+    rsvg_logo = fields.EmbeddedDocumentField(RSVGLogo, default=RSVGLogo())
+    aspect_ratio = fields.EmbeddedDocumentField(Rational, default=Rational())
 
     def get_type(self):
         return constants.StreamType.ENCODE
@@ -603,17 +634,19 @@ class EncodeStream(HardwareStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
 class TimeshiftRecorderStream(RelayStream):
+    output = fields.EmbeddedDocumentListField(OutputUrl, default=[], blank=True)
+
     def __init__(self, *args, **kwargs):
         super(TimeshiftRecorderStream, self).__init__(*args, **kwargs)
 
-    timeshift_chunk_duration = IntField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
-    timeshift_chunk_life_time = IntField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
+    timeshift_chunk_duration = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
+    timeshift_chunk_life_time = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
 
     def get_type(self):
         return constants.StreamType.TIMESHIFT_RECORDER
@@ -639,13 +672,13 @@ class TimeshiftRecorderStream(RelayStream):
         stream = cls()
         stream.visible = False
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
         return stream
 
 
 class CatchupStream(TimeshiftRecorderStream):
-    start = DateTimeField(default=datetime.utcfromtimestamp(0))
-    stop = DateTimeField(default=datetime.utcfromtimestamp(0))
+    start = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
+    stop = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
 
     def __init__(self, *args, **kwargs):
         super(CatchupStream, self).__init__(*args, **kwargs)
@@ -665,7 +698,7 @@ class CatchupStream(TimeshiftRecorderStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
         return stream
 
     def config(self) -> dict:
@@ -679,8 +712,8 @@ class CatchupStream(TimeshiftRecorderStream):
 
 
 class TimeshiftPlayerStream(RelayStream):
-    timeshift_dir = StringField(required=True)  # FIXME default
-    timeshift_delay = IntField(default=constants.DEFAULT_TIMESHIFT_DELAY, required=True)
+    timeshift_dir = fields.CharField(required=True)  # FIXME default
+    timeshift_delay = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_DELAY, required=True)
 
     def __init__(self, *args, **kwargs):
         super(TimeshiftPlayerStream, self).__init__(*args, **kwargs)
@@ -698,12 +731,14 @@ class TimeshiftPlayerStream(RelayStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
 class TestLifeStream(RelayStream):
+    output = fields.EmbeddedDocumentListField(OutputUrl, default=[], blank=True)
+
     def __init__(self, *args, **kwargs):
         super(TestLifeStream, self).__init__(*args, **kwargs)
 
@@ -722,8 +757,8 @@ class TestLifeStream(RelayStream):
         stream = cls()
         stream._settings = settings
         stream.visible = False
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id(), uri=constants.DEFAULT_TEST_URL)])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id(), uri=constants.DEFAULT_TEST_URL)]
         return stream
 
 
@@ -745,8 +780,8 @@ class CodRelayStream(RelayStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -768,29 +803,33 @@ class CodEncodeStream(EncodeStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
 # VODS
 
 
-class VodBasedStream:
+class VodBasedStream(EmbeddedMongoModel):
     MAX_DATE = datetime(2100, 1, 1)
     MIN_DATE = datetime(1970, 1, 1)
     DEFAULT_COUNTRY = 'Unknown'
-    vod_type = IntField(default=constants.VodType.VODS, required=True)
-    description = StringField(default=constants.DEFAULT_STREAM_DESCRIPTION,
-                              min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
-                              max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
-                              required=True)
-    trailer_url = StringField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
-                              min_length=constants.MIN_URL_LENGTH, required=True)
-    user_score = FloatField(default=0, min_value=0, max_value=100, required=True)
-    prime_date = DateTimeField(default=MIN_DATE, min_value=MIN_DATE, max_value=MAX_DATE, required=True)
-    country = StringField(default=DEFAULT_COUNTRY, required=True)
-    duration = IntField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
+
+    def __init__(self, *args, **kwargs):
+        super(VodBasedStream, self).__init__(*args, **kwargs)
+
+    vod_type = fields.IntegerField(default=constants.VodType.VODS, required=True)
+    description = fields.CharField(default=constants.DEFAULT_STREAM_DESCRIPTION,
+                                   min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
+                                   max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
+                                   required=True, blank=True)
+    trailer_url = fields.CharField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
+                                   min_length=constants.MIN_URL_LENGTH, required=True)
+    user_score = fields.FloatField(default=0, min_value=0, max_value=100, required=True)
+    prime_date = fields.DateTimeField(default=MIN_DATE, required=True)
+    country = fields.CharField(default=DEFAULT_COUNTRY, required=True)
+    duration = fields.IntegerField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
 
     def to_dict(self) -> dict:
         return {VodFields.DESCRIPTION_FIELD: self.description,
@@ -811,8 +850,8 @@ class ProxyVodStream(ProxyStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -842,8 +881,8 @@ class VodRelayStream(RelayStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -873,8 +912,8 @@ class VodEncodeStream(EncodeStream, VodBasedStream):
         stream = cls()
         stream.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
 
 
@@ -886,6 +925,9 @@ class EventStream(VodEncodeStream):
     def make_stream(cls, settings):
         stream = cls()
         stream._settings = settings
-        stream.input = InputUrls(urls=[InputUrl(id=InputUrl.generate_id())])
-        stream.output = OutputUrls(urls=[OutputUrl(id=OutputUrl.generate_id())])
+        stream.input = [InputUrl(id=InputUrl.generate_id())]
+        stream.output = [OutputUrl(id=OutputUrl.generate_id())]
         return stream
+
+
+IStream.register_delete_rule(IStream, 'IStream.parts', fields.ReferenceField.PULL)

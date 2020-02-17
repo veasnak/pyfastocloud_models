@@ -1,16 +1,16 @@
-from mongoengine import EmbeddedDocument, StringField, IntField, ListField, EmbeddedDocumentField, FloatField, \
-    BooleanField
+from pymodm import EmbeddedMongoModel, fields
 
 import pyfastocloud_models.constants as constants
 
 
-class Url(EmbeddedDocument):
-    meta = {'allow_inheritance': True, 'auto_create_index': False}
+class Url(EmbeddedMongoModel):
+    class Meta:
+        allow_inheritance = True
 
     _next_url_id = 0
 
-    id = IntField(default=lambda: Url.generate_id(), required=True)
-    uri = StringField(default='test', max_length=constants.MAX_URL_LENGTH, required=True)
+    id = fields.IntegerField(default=lambda: Url.generate_id(), required=True)
+    uri = fields.CharField(default='test', max_length=constants.MAX_URL_LENGTH, required=True)
 
     @staticmethod
     def generate_id():
@@ -19,14 +19,14 @@ class Url(EmbeddedDocument):
         return current_value
 
 
-class HttpProxy(EmbeddedDocument):
+class HttpProxy(EmbeddedMongoModel):
     INVALID_URL = str()
     DEFAULT_USER = str()
     DEFAULT_PASSWORD = str()
 
-    url = StringField(default=INVALID_URL, required=True)
-    user = StringField(default=DEFAULT_USER, required=False)
-    password = StringField(default=DEFAULT_PASSWORD, required=False)
+    url = fields.CharField(default=INVALID_URL, required=True, blank=True)
+    user = fields.CharField(default=DEFAULT_USER, required=False, blank=True)
+    password = fields.CharField(default=DEFAULT_PASSWORD, required=False, blank=True)
 
     def is_valid(self):
         return self.url != HttpProxy.INVALID_URL
@@ -36,28 +36,19 @@ class HttpProxy(EmbeddedDocument):
 
 
 class InputUrl(Url):
-    user_agent = IntField(default=constants.UserAgent.GSTREAMER, required=True)
-    stream_link = BooleanField(default=False, required=True)
-    proxy = EmbeddedDocumentField(HttpProxy)
+    user_agent = fields.IntegerField(default=constants.UserAgent.GSTREAMER, required=True)
+    stream_link = fields.BooleanField(default=False, required=True)
+    proxy = fields.EmbeddedDocumentField(HttpProxy)
 
 
 class OutputUrl(Url):
-    http_root = StringField(default='/', max_length=constants.MAX_PATH_LENGTH, required=False)
-    hls_type = IntField(default=constants.HlsType.HLS_PULL, required=False)
+    http_root = fields.CharField(default='/', max_length=constants.MAX_PATH_LENGTH, required=False)
+    hls_type = fields.IntegerField(default=constants.HlsType.HLS_PULL, required=False)
 
 
-# {"urls": [{"id": 81,"uri": "tcp://localhost:1935"}]}
-class InputUrls(EmbeddedDocument):
-    urls = ListField(EmbeddedDocumentField(InputUrl))
-
-
-class OutputUrls(EmbeddedDocument):
-    urls = ListField(EmbeddedDocumentField(OutputUrl))
-
-
-class Size(EmbeddedDocument):
-    width = IntField(default=constants.INVALID_WIDTH, required=True)
-    height = IntField(default=constants.INVALID_HEIGHT, required=True)
+class Size(EmbeddedMongoModel):
+    width = fields.IntegerField(default=constants.INVALID_WIDTH, required=True)
+    height = fields.IntegerField(default=constants.INVALID_HEIGHT, required=True)
 
     def is_valid(self):
         return self.width != constants.INVALID_WIDTH and self.height != constants.INVALID_HEIGHT
@@ -66,12 +57,12 @@ class Size(EmbeddedDocument):
         return '{0}x{1}'.format(self.width, self.height)
 
 
-class Logo(EmbeddedDocument):
-    path = StringField(default=constants.INVALID_LOGO_PATH, required=True)
-    x = IntField(default=constants.DEFAULT_LOGO_X, required=True)
-    y = IntField(default=constants.DEFAULT_LOGO_Y, required=True)
-    alpha = FloatField(default=constants.DEFAULT_LOGO_ALPHA, required=True)
-    size = EmbeddedDocumentField(Size, default=Size())
+class Logo(EmbeddedMongoModel):
+    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True, blank=True)
+    x = fields.IntegerField(default=constants.DEFAULT_LOGO_X, required=True)
+    y = fields.IntegerField(default=constants.DEFAULT_LOGO_Y, required=True)
+    alpha = fields.FloatField(default=constants.DEFAULT_LOGO_ALPHA, required=True)
+    size = fields.EmbeddedDocumentField(Size, default=Size())
 
     def is_valid(self):
         return self.path != constants.INVALID_LOGO_PATH
@@ -81,11 +72,11 @@ class Logo(EmbeddedDocument):
                 'size': str(self.size)}
 
 
-class RSVGLogo(EmbeddedDocument):
-    path = StringField(default=constants.INVALID_LOGO_PATH, required=True)
-    x = IntField(default=constants.DEFAULT_LOGO_X, required=True)
-    y = IntField(default=constants.DEFAULT_LOGO_Y, required=True)
-    size = EmbeddedDocumentField(Size, default=Size())
+class RSVGLogo(EmbeddedMongoModel):
+    path = fields.CharField(default=constants.INVALID_LOGO_PATH, required=True, blank=True)
+    x = fields.IntegerField(default=constants.DEFAULT_LOGO_X, required=True)
+    y = fields.IntegerField(default=constants.DEFAULT_LOGO_Y, required=True)
+    size = fields.EmbeddedDocumentField(Size, default=Size())
 
     def is_valid(self):
         return self.path != constants.INVALID_LOGO_PATH
@@ -94,9 +85,9 @@ class RSVGLogo(EmbeddedDocument):
         return {'path': self.path, 'position': '{0},{1}'.format(self.x, self.y), 'size': str(self.size)}
 
 
-class Rational(EmbeddedDocument):
-    num = IntField(default=constants.INVALID_RATIO_NUM, required=True)
-    den = IntField(default=constants.INVALID_RATIO_DEN, required=True)
+class Rational(EmbeddedMongoModel):
+    num = fields.IntegerField(default=constants.INVALID_RATIO_NUM, required=True)
+    den = fields.IntegerField(default=constants.INVALID_RATIO_DEN, required=True)
 
     def is_valid(self):
         return self.num != constants.INVALID_RATIO_NUM and self.den != constants.INVALID_RATIO_DEN
@@ -105,11 +96,11 @@ class Rational(EmbeddedDocument):
         return '{0}:{1}'.format(self.num, self.den)
 
 
-class HostAndPort(EmbeddedDocument):
+class HostAndPort(EmbeddedMongoModel):
     DEFAULT_HOST = 'localhost'
     DEFAULT_PORT = 6317
-    host = StringField(default=DEFAULT_HOST, required=True)
-    port = IntField(default=DEFAULT_PORT, required=True)
+    host = fields.CharField(default=DEFAULT_HOST, required=True)
+    port = fields.IntegerField(default=DEFAULT_PORT, required=True)
 
     def __str__(self):
         return '{0}:{1}'.format(self.host, self.port)

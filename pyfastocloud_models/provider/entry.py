@@ -1,14 +1,14 @@
 from datetime import datetime
 from enum import IntEnum
 
-from mongoengine import Document, StringField, DateTimeField, IntField, ListField, ReferenceField, PULL
+from pymodm import MongoModel, fields
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from pyfastocloud_models.service.entry import ServiceSettings
 import pyfastocloud_models.constants as constants
 
 
-class Provider(Document):
+class Provider(MongoModel):
     class Status(IntEnum):
         NO_ACTIVE = 0
         ACTIVE = 1
@@ -18,16 +18,26 @@ class Provider(Document):
         GUEST = 0,
         USER = 1
 
-    meta = {'allow_inheritance': True, 'collection': 'providers', 'auto_create_index': False}
-    email = StringField(max_length=64, required=True)
-    password = StringField(required=True)
-    created_date = DateTimeField(default=datetime.now)
-    status = IntField(default=Status.NO_ACTIVE)
-    type = IntField(default=Type.USER)
-    country = StringField(min_length=2, max_length=3, required=True)
-    language = StringField(default=constants.DEFAULT_LOCALE, required=True)
+    class Meta:
+        collection_name = 'providers'
+        allow_inheritance = True
 
-    servers = ListField(ReferenceField(ServiceSettings, reverse_delete_rule=PULL), default=[])
+    email = fields.CharField(max_length=64, required=True)
+    password = fields.CharField(required=True)
+    created_date = fields.DateTimeField(default=datetime.now)
+    status = fields.IntegerField(default=Status.NO_ACTIVE)
+    type = fields.IntegerField(default=Type.USER)
+    country = fields.CharField(min_length=2, max_length=3, required=True)
+    language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
+
+    servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
+
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def add_server(self, server):
         self.servers.append(server)

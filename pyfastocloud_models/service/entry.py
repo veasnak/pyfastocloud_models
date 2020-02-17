@@ -1,8 +1,7 @@
 from enum import IntEnum
 
 from bson import ObjectId
-from mongoengine import Document, ListField, EmbeddedDocumentField, ReferenceField, EmbeddedDocument, IntField, \
-    StringField, EmbeddedDocumentListField, PULL
+from pymodm import MongoModel, fields, EmbeddedMongoModel
 
 import pyfastocloud_models.constants as constants
 from pyfastocloud_models.common_entries import HostAndPort
@@ -14,7 +13,7 @@ from pyfastocloud_models.series.entry import Serial
 # #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Amptv.png/330px-Amptv.png" group-title="Armenia(Հայաստան)",1TV
 # http://amtv1.livestreamingcdn.com/am2abr/tracks-v1a1/index.m3u8
 
-class ProviderPair(EmbeddedDocument):
+class ProviderPair(EmbeddedMongoModel):
     class Roles(IntEnum):
         READ = 0
         WRITE = 1
@@ -32,14 +31,14 @@ class ProviderPair(EmbeddedDocument):
         def __str__(self):
             return str(self.value)
 
-    user = ReferenceField('Provider')
-    role = IntField(min_value=Roles.READ, max_value=Roles.ADMIN, default=Roles.ADMIN)
+    user = fields.ReferenceField('Provider')
+    role = fields.IntegerField(min_value=Roles.READ, max_value=Roles.ADMIN, default=Roles.ADMIN)
 
 
 def safe_delete_stream(stream: IStream):
     if stream:
         from pyfastocloud_models.subscriber.entry import Subscriber
-        subscribers = Subscriber.objects()
+        subscribers = Subscriber.objects.all()
         for subscriber in subscribers:
             subscriber.remove_official_stream(stream)
         for catchup in stream.parts:
@@ -47,7 +46,10 @@ def safe_delete_stream(stream: IStream):
         stream.delete()
 
 
-class ServiceSettings(Document):
+class ServiceSettings(MongoModel):
+    class Meta:
+        collection_name = 'services'
+
     DEFAULT_SERVICE_NAME = 'Service'
     MIN_SERVICE_NAME_LENGTH = 3
     MAX_SERVICE_NAME_LENGTH = 30
@@ -71,31 +73,37 @@ class ServiceSettings(Document):
     DEFAULT_SERVICE_CODS_HOST = 'localhost'
     DEFAULT_SERVICE_CODS_PORT = 6001
 
-    meta = {'collection': 'services', 'auto_create_index': False}
+    streams = fields.ListField(fields.ReferenceField(IStream, on_delete=fields.ReferenceField.PULL), default=[], blank=True)
+    series = fields.ListField(fields.ReferenceField(Serial, on_delete=fields.ReferenceField.PULL), default=[], blank=True)
+    providers = fields.EmbeddedDocumentListField(ProviderPair, default=[])
 
-    streams = ListField(ReferenceField(IStream, reverse_delete_rule=PULL), default=[])
-    series = ListField(ReferenceField(Serial, reverse_delete_rule=PULL), default=[])
-    providers = EmbeddedDocumentListField(ProviderPair, default=[])
+    name = fields.CharField(default=DEFAULT_SERVICE_NAME, max_length=MAX_SERVICE_NAME_LENGTH,
+                            min_length=MIN_SERVICE_NAME_LENGTH)
+    host = fields.EmbeddedDocumentField(HostAndPort,
+                                        default=HostAndPort(host=DEFAULT_SERVICE_HOST, port=DEFAULT_SERVICE_PORT))
+    http_host = fields.EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_HTTP_HOST,
+                                                                              port=DEFAULT_SERVICE_HTTP_PORT))
+    vods_host = fields.EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_VODS_HOST,
+                                                                              port=DEFAULT_SERVICE_VODS_PORT))
+    cods_host = fields.EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_CODS_HOST,
+                                                                              port=DEFAULT_SERVICE_CODS_PORT))
 
-    name = StringField(unique=True, default=DEFAULT_SERVICE_NAME, max_length=MAX_SERVICE_NAME_LENGTH,
-                       min_length=MIN_SERVICE_NAME_LENGTH)
-    host = EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_HOST, port=DEFAULT_SERVICE_PORT))
-    http_host = EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_HTTP_HOST,
-                                                                       port=DEFAULT_SERVICE_HTTP_PORT))
-    vods_host = EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_VODS_HOST,
-                                                                       port=DEFAULT_SERVICE_VODS_PORT))
-    cods_host = EmbeddedDocumentField(HostAndPort, default=HostAndPort(host=DEFAULT_SERVICE_CODS_HOST,
-                                                                       port=DEFAULT_SERVICE_CODS_PORT))
+    feedback_directory = fields.CharField(default=DEFAULT_FEEDBACK_DIR_PATH)
+    timeshifts_directory = fields.CharField(default=DEFAULT_TIMESHIFTS_DIR_PATH)
+    hls_directory = fields.CharField(default=DEFAULT_HLS_DIR_PATH)
+    playlists_directory = fields.CharField(default=DEFAULT_PLAYLISTS_DIR_PATH)
+    dvb_directory = fields.CharField(default=DEFAULT_DVB_DIR_PATH)
+    capture_card_directory = fields.CharField(default=DEFAULT_CAPTURE_DIR_PATH)
+    vods_in_directory = fields.CharField(default=DEFAULT_VODS_IN_DIR_PATH)
+    vods_directory = fields.CharField(default=DEFAULT_VODS_DIR_PATH)
+    cods_directory = fields.CharField(default=DEFAULT_CODS_DIR_PATH)
 
-    feedback_directory = StringField(default=DEFAULT_FEEDBACK_DIR_PATH)
-    timeshifts_directory = StringField(default=DEFAULT_TIMESHIFTS_DIR_PATH)
-    hls_directory = StringField(default=DEFAULT_HLS_DIR_PATH)
-    playlists_directory = StringField(default=DEFAULT_PLAYLISTS_DIR_PATH)
-    dvb_directory = StringField(default=DEFAULT_DVB_DIR_PATH)
-    capture_card_directory = StringField(default=DEFAULT_CAPTURE_DIR_PATH)
-    vods_in_directory = StringField(default=DEFAULT_VODS_IN_DIR_PATH)
-    vods_directory = StringField(default=DEFAULT_VODS_DIR_PATH)
-    cods_directory = StringField(default=DEFAULT_CODS_DIR_PATH)
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def get_host(self) -> str:
         return str(self.host)

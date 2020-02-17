@@ -3,8 +3,7 @@ from hashlib import md5
 from bson.objectid import ObjectId
 from enum import IntEnum
 
-from mongoengine import Document, EmbeddedDocument, StringField, DateTimeField, IntField, ListField, ReferenceField, \
-    PULL, ObjectIdField, BooleanField, EmbeddedDocumentListField
+from pymodm import MongoModel, fields, EmbeddedMongoModel
 
 from pyfastocloud_models.service.entry import ServiceSettings
 from pyfastocloud_models.stream.entry import IStream
@@ -51,7 +50,7 @@ def for_subscribers_stream(stream: IStream):
     return is_vod_stream(stream) or is_live_stream(stream) or is_catchup(stream)
 
 
-class Device(EmbeddedDocument):
+class Device(EmbeddedMongoModel):
     ID_FIELD = 'id'
     NAME_FIELD = 'name'
     STATUS_FIELD = 'status'
@@ -77,14 +76,13 @@ class Device(EmbeddedDocument):
         def __str__(self):
             return str(self.value)
 
-    meta = {'auto_create_index': True}
-    id = ObjectIdField(required=True, default=ObjectId, unique=True, primary_key=True)
-    created_date = DateTimeField(default=datetime.now)
-    status = IntField(default=Status.NOT_ACTIVE)
-    name = StringField(default=DEFAULT_DEVICE_NAME, min_length=MIN_DEVICE_NAME_LENGTH,
-                       max_length=MAX_DEVICE_NAME_LENGTH, required=True)
+    id = fields.ObjectIdField(required=True, default=ObjectId, primary_key=True)
+    created_date = fields.DateTimeField(default=datetime.now)
+    status = fields.IntegerField(default=Status.NOT_ACTIVE)
+    name = fields.CharField(default=DEFAULT_DEVICE_NAME, min_length=MIN_DEVICE_NAME_LENGTH,
+                            max_length=MAX_DEVICE_NAME_LENGTH, required=True)
 
-    def get_id(self):
+    def get_id(self) -> str:
         return str(self.id)
 
     def to_dict(self) -> dict:
@@ -92,19 +90,20 @@ class Device(EmbeddedDocument):
                 Device.CREATED_DATE_FIELD: date_to_utc_msec(self.created_date)}
 
 
-class UserStream(EmbeddedDocument):
+class UserStream(EmbeddedMongoModel):
     FAVORITE_FIELD = 'favorite'
     PRIVATE_FIELD = 'private'
     RECENT_FIELD = 'recent'
 
-    sid = ReferenceField(IStream, required=True)
-    favorite = BooleanField(default=False)
-    private = BooleanField(default=False)
-    recent = DateTimeField(default=datetime.utcfromtimestamp(0))
-    interruption_time = IntField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC, required=True)
+    sid = fields.ReferenceField(IStream, required=True)
+    favorite = fields.BooleanField(default=False)
+    private = fields.BooleanField(default=False)
+    recent = fields.DateTimeField(default=datetime.utcfromtimestamp(0))
+    interruption_time = fields.IntegerField(default=0, min_value=0, max_value=constants.MAX_VIDEO_DURATION_MSEC,
+                                            required=True)
 
-    def get_id(self):
-        return str(self.sid.id)
+    def get_id(self) -> str:
+        return str(self.pk)
 
     def to_dict(self) -> dict:
         res = self.sid.to_dict()
@@ -121,7 +120,11 @@ class UserStream(EmbeddedDocument):
         return res
 
 
-class Subscriber(Document):
+class Subscriber(MongoModel):
+    class Meta:
+        collection_name = 'subscribers'
+        allow_inheritance = True
+
     MAX_DATE = datetime(2100, 1, 1)
     ID_FIELD = 'id'
     EMAIL_FIELD = 'login'
@@ -145,22 +148,27 @@ class Subscriber(Document):
 
     SUBSCRIBER_HASH_LENGTH = 32
 
-    meta = {'allow_inheritance': True, 'collection': 'subscribers', 'auto_create_index': False}
+    email = fields.CharField(max_length=64, required=True)
+    first_name = fields.CharField(max_length=64, required=True)
+    last_name = fields.CharField(max_length=64, required=True)
+    password = fields.CharField(min_length=SUBSCRIBER_HASH_LENGTH, max_length=SUBSCRIBER_HASH_LENGTH, required=True)
+    created_date = fields.DateTimeField(default=datetime.now)
+    exp_date = fields.DateTimeField(default=MAX_DATE)
+    status = fields.IntegerField(default=Status.NOT_ACTIVE)
+    country = fields.CharField(min_length=2, max_length=3, required=True)
+    language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
 
-    email = StringField(max_length=64, required=True)
-    first_name = StringField(max_length=64, required=True)
-    last_name = StringField(max_length=64, required=True)
-    password = StringField(min_length=SUBSCRIBER_HASH_LENGTH, max_length=SUBSCRIBER_HASH_LENGTH, required=True)
-    created_date = DateTimeField(default=datetime.now)
-    exp_date = DateTimeField(default=MAX_DATE)
-    status = IntField(default=Status.NOT_ACTIVE)
-    country = StringField(min_length=2, max_length=3, required=True)
-    language = StringField(default=constants.DEFAULT_LOCALE, required=True)
+    servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
+    devices = fields.EmbeddedDocumentListField(Device, default=[], blank=True)
+    max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
+    streams = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
 
-    servers = ListField(ReferenceField(ServiceSettings, reverse_delete_rule=PULL), default=[])
-    devices = EmbeddedDocumentListField(Device, default=[])
-    max_devices_count = IntField(default=constants.DEFAULT_DEVICES_COUNT)
-    streams = EmbeddedDocumentListField(UserStream, default=[])
+    def get_id(self) -> str:
+        return str(self.pk)
+
+    @property
+    def id(self):
+        return self.pk
 
     def created_date_utc_msec(self):
         return date_to_utc_msec(self.created_date)
@@ -175,12 +183,18 @@ class Subscriber(Document):
     def add_device(self, device: Device):
         if len(self.devices) < self.max_devices_count:
             self.devices.append(device)
-            self.devices.save()
+            self.save()
 
     def remove_device(self, sid: ObjectId):
-        devices = self.devices.filter(id=sid)
-        devices.delete()
-        self.devices.save()
+        for dev in self.devices:
+            if dev.id == sid:
+                self.devices.remove(dev)
+                break
+        self.save()
+
+        # devices = self.devices.get({'id': sid})
+        # if devices:
+        #    devices.delete()
 
     def find_device(self, sid: ObjectId):
         devices = self.devices.filter(id=sid)
@@ -205,59 +219,81 @@ class Subscriber(Document):
         self.add_official_stream(user_stream)
 
     def add_official_stream(self, user_stream: UserStream):
-        found_streams = self.streams.filter(sid=user_stream.sid)
-        if not found_streams:
-            self.streams.append(user_stream)
-            self.streams.save()
+        for stream in self.streams:
+            if not stream.private and stream.sid == user_stream.sid:
+                return
+
+        self.streams.append(user_stream)
+        self.save()
 
     def _add_official_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         self.add_official_stream(user_stream)
 
     def add_own_stream(self, user_stream: UserStream):
-        found_streams = self.streams.filter(sid=user_stream.sid)
-        if not found_streams:
-            user_stream.private = True
-            self.streams.append(user_stream)
-            self.streams.save()
+        for stream in self.streams:
+            if stream.private and stream.sid == user_stream:
+                return
+
+        user_stream.private = True
+        self.streams.append(user_stream)
+        self.save()
 
     def _add_own_stream(self, stream: IStream):
         user_stream = UserStream(sid=stream.id)
         user_stream.private = True
         self.add_own_stream(user_stream)
 
-    def remove_official_stream(self, stream: IStream):
-        streams = self.streams.filter(sid=stream)
-        streams.delete()
-        self.streams.save()
+    def remove_official_stream(self, ostream: IStream):
+        if not ostream:
+            return
+
+        for stream in self.streams:
+            if not stream.private and stream.sid == ostream:
+                self.streams.remove(stream)
+        self.save()
 
     def remove_official_stream_by_id(self, sid: ObjectId):
-        original_stream = IStream.objects(id=sid).first()
+        original_stream = IStream.get_stream_by_id(sid)
         self.remove_official_stream(original_stream)
 
     def remove_own_stream_by_id(self, sid: ObjectId):
-        stream = IStream.objects(id=sid).first()
-        streams = self.streams.filter(sid=stream, private=True)
-        for stream in streams:
-            stream.sid.delete()
-        streams.delete()
-        self.streams.save()
+        stream = IStream.get_stream_by_id(sid)
+        if stream:
+            for stream in self.streams:
+                if stream.sid == sid:
+                    self.stream.remove(stream)
+            stream.delete()
+            self.save()
 
     def remove_all_own_streams(self):
-        streams = self.streams.filter(private=True)
-        for stream in streams:
-            stream.sid.delete()
-        streams.delete()
-        self.streams.save()
+        for stream in self.streams:
+            if stream.private:
+                self.streams.remove(stream)
+        self.save()
 
     def find_own_stream(self, sid: ObjectId):
-        return IStream.objects(id=sid).first()
+        for stream in self.streams:
+            if stream.id == sid:
+                return stream
+
+        return None
 
     def official_streams(self):
-        return self.streams.filter(private=False)
+        streams = []
+        for stream in self.streams:
+            if not stream.private:
+                streams.append(stream)
+
+        return streams
 
     def own_streams(self):
-        return self.streams.filter(private=True)
+        streams = []
+        for stream in self.streams:
+            if stream.private:
+                streams.append(stream)
+
+        return streams
 
     def all_available_servers(self):
         return self.servers
@@ -312,9 +348,6 @@ class Subscriber(Document):
                     self._add_official_stream(stream)
                 else:
                     self.remove_official_stream(stream)
-
-    def delete(self, *args, **kwargs):
-        return Document.delete(self, *args, **kwargs)
 
     def delete_fake(self, *args, **kwargs):
         self.remove_all_own_streams()
