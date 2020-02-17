@@ -820,10 +820,10 @@ class VodBasedStream(EmbeddedMongoModel):
         super(VodBasedStream, self).__init__(*args, **kwargs)
 
     vod_type = fields.IntegerField(default=constants.VodType.VODS, required=True)
-    description = fields.CharField(default=constants.DEFAULT_STREAM_DESCRIPTION,
+    description = fields.CharField(default=constants.DEFAULT_VOD_DESCRIPTION,
                                    min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
                                    max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
-                                   required=True, blank=True)
+                                   required=True)
     trailer_url = fields.CharField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
                                    min_length=constants.MIN_URL_LENGTH, required=True)
     user_score = fields.FloatField(default=0, min_value=0, max_value=100, required=True)

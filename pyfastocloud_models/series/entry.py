@@ -26,7 +26,7 @@ class Serial(MongoModel):
     group = fields.CharField(default=constants.DEFAULT_STREAM_GROUP_TITLE,
                              max_length=constants.MAX_STREAM_GROUP_TITLE_LENGTH,
                              min_length=constants.MIN_STREAM_GROUP_TITLE_LENGTH, required=True)
-    description = fields.CharField(default=constants.DEFAULT_STREAM_DESCRIPTION,
+    description = fields.CharField(default=constants.DEFAULT_SERIES_DESCRIPTION,
                                    min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
                                    max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
                                    required=True)
