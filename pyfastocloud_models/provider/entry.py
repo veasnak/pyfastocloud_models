@@ -21,7 +21,6 @@ class Provider(MongoModel):
     class Meta:
         collection_name = 'providers'
         allow_inheritance = True
-        connection_alias = 'default'
 
     email = fields.CharField(max_length=64, required=True)
     password = fields.CharField(required=True)
