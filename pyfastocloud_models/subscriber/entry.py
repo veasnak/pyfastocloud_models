@@ -159,9 +159,9 @@ class Subscriber(MongoModel):
     language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
 
     servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
-    devices = fields.EmbeddedDocumentListField(Device, default=[])
+    devices = fields.EmbeddedDocumentListField(Device, default=[], blank=True)
     max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
-    streams = fields.EmbeddedDocumentListField(UserStream, default=[])
+    streams = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
 
     def get_id(self) -> str:
         return str(self.pk)
