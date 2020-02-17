@@ -220,7 +220,7 @@ class Subscriber(MongoModel):
 
     def add_official_stream(self, user_stream: UserStream):
         for stream in self.streams:
-            if not stream.private and stream.sid == user_stream:
+            if not stream.private and stream.sid == user_stream.sid:
                 return
 
         self.streams.append(user_stream)
