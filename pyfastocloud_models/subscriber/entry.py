@@ -326,18 +326,12 @@ class Subscriber(MongoModel):
         return streams
 
     def select_all_streams(self, select: bool):
-        for istream in self.all_available_official_streams():
-            if is_live_stream(istream):
-                for stream in self.streams:
-                    if not stream.private and stream.sid == istream.id:
-                        continue
-
-                ustream = UserStream(sid=istream.id)
+        for stream in self.all_available_official_streams():
+            if is_live_stream(stream):
                 if select:
-                    self.streams.append(ustream)
+                    self._add_official_stream(stream)
                 else:
-                    self.streams.remove(ustream)
-        self.save()
+                    self.remove_official_stream(stream)
 
     def select_all_vods(self, select: bool):
         for stream in self.all_available_official_vods():
