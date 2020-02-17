@@ -245,18 +245,20 @@ class Subscriber(MongoModel):
         self.add_own_stream(user_stream)
 
     def remove_official_stream(self, ostream: IStream):
+        if not ostream:
+            return
+
         for stream in self.streams:
             if not stream.private and stream.sid == ostream:
                 self.streams.remove(stream)
-                break
         self.save()
 
     def remove_official_stream_by_id(self, sid: ObjectId):
-        original_stream = IStream.objects.get({'id': sid})
+        original_stream = IStream.get_stream_by_id(sid)
         self.remove_official_stream(original_stream)
 
     def remove_own_stream_by_id(self, sid: ObjectId):
-        stream = IStream.objects.get({'id': sid})
+        stream = IStream.get_stream_by_id(sid)
         if stream:
             for stream in self.streams:
                 if stream.sid == sid:

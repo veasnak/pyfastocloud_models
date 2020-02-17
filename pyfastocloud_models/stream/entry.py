@@ -5,6 +5,7 @@ import os
 import json
 
 from pymodm import MongoModel, fields, EmbeddedMongoModel
+from bson.objectid import ObjectId
 
 from pyfastocloud_models.utils.utils import date_to_utc_msec
 import pyfastocloud_models.constants as constants
@@ -128,6 +129,15 @@ class StreamLogLevel(IntEnum):
 
 
 class IStream(MongoModel):
+    @staticmethod
+    def get_stream_by_id(sid: ObjectId):
+        try:
+            stream = IStream.objects.get({'_id': sid})
+        except IStream.DoesNotExist:
+            return None
+        else:
+            return stream
+
     class Meta:
         collection_name = 'streams'
         allow_inheritance = True
