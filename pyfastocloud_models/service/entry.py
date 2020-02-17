@@ -38,7 +38,7 @@ class ProviderPair(EmbeddedMongoModel):
 def safe_delete_stream(stream: IStream):
     if stream:
         from pyfastocloud_models.subscriber.entry import Subscriber
-        subscribers = Subscriber.objects.get({})
+        subscribers = Subscriber.objects.all()
         for subscriber in subscribers:
             subscriber.remove_official_stream(stream)
         for catchup in stream.parts:
@@ -73,8 +73,8 @@ class ServiceSettings(MongoModel):
     DEFAULT_SERVICE_CODS_HOST = 'localhost'
     DEFAULT_SERVICE_CODS_PORT = 6001
 
-    streams = fields.ListField(fields.ReferenceField(IStream, on_delete=fields.ReferenceField.PULL), default=[])
-    series = fields.ListField(fields.ReferenceField(Serial, on_delete=fields.ReferenceField.PULL), default=[])
+    streams = fields.ListField(fields.ReferenceField(IStream, on_delete=fields.ReferenceField.PULL), default=[], blank=True)
+    series = fields.ListField(fields.ReferenceField(Serial, on_delete=fields.ReferenceField.PULL), default=[], blank=True)
     providers = fields.EmbeddedDocumentListField(ProviderPair, default=[])
 
     name = fields.CharField(default=DEFAULT_SERVICE_NAME, max_length=MAX_SERVICE_NAME_LENGTH,

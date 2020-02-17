@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 import os
 import json
 
-from pymodm import MongoModel, fields
+from pymodm import MongoModel, fields, EmbeddedMongoModel
 
 from pyfastocloud_models.utils.utils import date_to_utc_msec
 import pyfastocloud_models.constants as constants
@@ -797,15 +797,19 @@ class CodEncodeStream(EncodeStream):
 # VODS
 
 
-class VodBasedStream:
+class VodBasedStream(EmbeddedMongoModel):
     MAX_DATE = datetime(2100, 1, 1)
     MIN_DATE = datetime(1970, 1, 1)
     DEFAULT_COUNTRY = 'Unknown'
+
+    def __init__(self, *args, **kwargs):
+        super(VodBasedStream, self).__init__(*args, **kwargs)
+
     vod_type = fields.IntegerField(default=constants.VodType.VODS, required=True)
     description = fields.CharField(default=constants.DEFAULT_STREAM_DESCRIPTION,
                                    min_length=constants.MIN_STREAM_DESCRIPTION_LENGTH,
                                    max_length=constants.MAX_STREAM_DESCRIPTION_LENGTH,
-                                   required=True)
+                                   required=True, blank=True)
     trailer_url = fields.CharField(default=constants.INVALID_TRAILER_URL, max_length=constants.MAX_URL_LENGTH,
                                    min_length=constants.MIN_URL_LENGTH, required=True)
     user_score = fields.FloatField(default=0, min_value=0, max_value=100, required=True)
