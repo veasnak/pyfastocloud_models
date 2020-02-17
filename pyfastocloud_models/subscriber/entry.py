@@ -186,9 +186,10 @@ class Subscriber(MongoModel):
             self.save()
 
     def remove_device(self, sid: ObjectId):
-        devices = self.devices.filter(id=sid)
-        devices.delete()
-        self.save()
+        devices = self.devices.get({'id': sid})
+        if devices:
+            devices.delete()
+            self.save()
 
     def find_device(self, sid: ObjectId):
         devices = self.devices.filter(id=sid)
