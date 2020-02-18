@@ -162,6 +162,8 @@ class Subscriber(MongoModel):
     devices = fields.EmbeddedDocumentListField(Device, default=[], blank=True)
     max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
     streams = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
+    vods = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
+    catchups = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
 
     def get_id(self) -> str:
         return str(self.pk)
@@ -326,12 +328,22 @@ class Subscriber(MongoModel):
         return streams
 
     def select_all_streams(self, select: bool):
+        if not select:
+            self.streams = []
+            self.save()
+            return
+
+        ustreams = []
         for stream in self.all_available_official_streams():
-            if is_live_stream(stream):
-                if select:
-                    self._add_official_stream(stream)
-                else:
-                    self.remove_official_stream(stream)
+            user_stream = UserStream(sid=stream.id)
+            for stream in self.streams:
+                if not stream.private and stream.sid == user_stream.sid:
+                    user_stream = stream
+                    break
+            ustreams.append(user_stream)
+
+        self.streams = ustreams
+        self.save()
 
     def select_all_vods(self, select: bool):
         for stream in self.all_available_official_vods():
