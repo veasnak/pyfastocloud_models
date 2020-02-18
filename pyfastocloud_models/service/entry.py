@@ -41,6 +41,8 @@ def safe_delete_stream(stream: IStream):
         subscribers = Subscriber.objects.all()
         for subscriber in subscribers:
             subscriber.remove_official_stream(stream)
+            subscriber.remove_official_vod(stream)
+            subscriber.remove_official_catchup(stream)
         for catchup in stream.parts:
             safe_delete_stream(catchup)
         stream.delete()

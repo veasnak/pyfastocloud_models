@@ -161,6 +161,7 @@ class Subscriber(MongoModel):
     servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
     devices = fields.EmbeddedDocumentListField(Device, default=[], blank=True)
     max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
+    # content
     streams = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
     vods = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
     catchups = fields.EmbeddedDocumentListField(UserStream, default=[], blank=True)
@@ -216,35 +217,21 @@ class Subscriber(MongoModel):
     def all_streams(self):
         return self.streams
 
+    # official streams
     def add_official_stream_by_id(self, oid: ObjectId):
         user_stream = UserStream(sid=oid)
         self.add_official_stream(user_stream)
 
     def add_official_stream(self, user_stream: UserStream):
+        if not user_stream:
+            return
+
         for stream in self.streams:
             if not stream.private and stream.sid == user_stream.sid:
                 return
 
         self.streams.append(user_stream)
         self.save()
-
-    def _add_official_stream(self, stream: IStream):
-        user_stream = UserStream(sid=stream.id)
-        self.add_official_stream(user_stream)
-
-    def add_own_stream(self, user_stream: UserStream):
-        for stream in self.streams:
-            if stream.private and stream.sid == user_stream:
-                return
-
-        user_stream.private = True
-        self.streams.append(user_stream)
-        self.save()
-
-    def _add_own_stream(self, stream: IStream):
-        user_stream = UserStream(sid=stream.id)
-        user_stream.private = True
-        self.add_own_stream(user_stream)
 
     def remove_official_stream(self, ostream: IStream):
         if not ostream:
@@ -258,6 +245,74 @@ class Subscriber(MongoModel):
     def remove_official_stream_by_id(self, sid: ObjectId):
         original_stream = IStream.get_stream_by_id(sid)
         self.remove_official_stream(original_stream)
+
+    # official vods
+    def add_official_vod_by_id(self, oid: ObjectId):
+        user_stream = UserStream(sid=oid)
+        self.add_official_vod(user_stream)
+
+    def add_official_vod(self, user_stream: UserStream):
+        if not user_stream:
+            return
+
+        for vod in self.vods:
+            if not vod.private and vod.sid == user_stream.sid:
+                return
+
+        self.vod.append(user_stream)
+        self.save()
+
+    def remove_official_vod(self, ostream: IStream):
+        if not ostream:
+            return
+
+        for vod in self.vods:
+            if not vod.private and vod.sid == ostream:
+                self.vod.remove(vod)
+        self.save()
+
+    def remove_official_vod_by_id(self, sid: ObjectId):
+        original_stream = IStream.get_stream_by_id(sid)
+        self.remove_official_vod(original_stream)
+
+    # official catchups
+    def add_official_catchup_by_id(self, oid: ObjectId):
+        user_stream = UserStream(sid=oid)
+        self.add_official_catchup(user_stream)
+
+    def add_official_catchup(self, user_stream: UserStream):
+        if not user_stream:
+            return
+
+        for catchup in self.catchups:
+            if not catchup.private and catchup.sid == user_stream.sid:
+                return
+
+        self.catchups.append(user_stream)
+        self.save()
+
+    def remove_official_catchup(self, ostream: IStream):
+        if not ostream:
+            return
+
+        for catchup in self.catchups:
+            if not catchup.private and catchup.sid == ostream:
+                self.catchups.remove(catchup)
+        self.save()
+
+    def remove_official_catchup_by_id(self, sid: ObjectId):
+        original_stream = IStream.get_stream_by_id(sid)
+        self.remove_official_vod(original_stream)
+
+    # own
+    def add_own_stream(self, user_stream: UserStream):
+        for stream in self.streams:
+            if stream.private and stream.sid == user_stream:
+                return
+
+        user_stream.private = True
+        self.streams.append(user_stream)
+        self.save()
 
     def remove_own_stream_by_id(self, sid: ObjectId):
         stream = IStream.get_stream_by_id(sid)
@@ -274,13 +329,31 @@ class Subscriber(MongoModel):
                 self.streams.remove(stream)
         self.save()
 
-    def find_own_stream(self, sid: ObjectId):
+    def add_own_vod(self, user_stream: UserStream):
+        for vod in self.vod:
+            if vod.private and vod.sid == user_stream.sid:
+                return
+
+        user_stream.private = True
+        self.vod.append(user_stream)
+        self.save()
+
+    def remove_own_vod_by_id(self, sid: ObjectId):
+        vod = IStream.get_stream_by_id(sid)
+        if vod:
+            for vod in self.vod:
+                if vod.private and vod.sid == sid:
+                    self.vod.remove(vod)
+            vod.delete()
+            self.save()
+
+    def remove_all_own_vods(self):
         for stream in self.streams:
-            if stream.id == sid:
-                return stream
+            if stream.private:
+                self.vods.remove(stream)
+        self.save()
 
-        return None
-
+    # available
     def official_streams(self):
         streams = []
         for stream in self.streams:
@@ -327,6 +400,7 @@ class Subscriber(MongoModel):
 
         return streams
 
+    # select
     def select_all_streams(self, select: bool):
         if not select:
             self.streams = []
@@ -346,23 +420,49 @@ class Subscriber(MongoModel):
         self.save()
 
     def select_all_vods(self, select: bool):
+        if not select:
+            self.vods = []
+            self.save()
+            return
+
+        ustreams = []
         for stream in self.all_available_official_vods():
-            if is_vod_stream(stream):
-                if select:
-                    self._add_official_stream(stream)
-                else:
-                    self.remove_official_stream(stream)
+            user_stream = UserStream(sid=stream.id)
+            for stream in self.streams:
+                if not stream.private and stream.sid == user_stream.sid:
+                    user_stream = stream
+                    break
+            ustreams.append(user_stream)
+
+        self.vods = ustreams
+        self.save()
 
     def select_all_catchups(self, select: bool):
+        if not select:
+            self.catchups = []
+            self.save()
+            return
+
+        ustreams = []
         for stream in self.all_available_official_catchups():
-            if is_catchup(stream):
-                if select:
-                    self._add_official_stream(stream)
-                else:
-                    self.remove_official_stream(stream)
+            user_stream = UserStream(sid=stream.id)
+            for stream in self.streams:
+                if not stream.private and stream.sid == user_stream.sid:
+                    user_stream = stream
+                    break
+            ustreams.append(user_stream)
+
+        self.catchups = ustreams
+        self.save()
+
+    def delete(self, *args, **kwargs):
+        self.remove_all_own_streams()
+        self.remove_all_own_vods()
+        return super(ServiceSettings, self).delete(*args, **kwargs)
 
     def delete_fake(self, *args, **kwargs):
         self.remove_all_own_streams()
+        self.remove_all_own_vods()
         self.status = Subscriber.Status.DELETED
         self.save()
         # return Document.delete(self, *args, **kwargs)
