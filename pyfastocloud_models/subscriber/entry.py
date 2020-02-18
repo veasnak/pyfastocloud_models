@@ -426,13 +426,13 @@ class Subscriber(MongoModel):
             return
 
         ustreams = []
-        for stream in self.all_available_official_vods():
-            user_stream = UserStream(sid=stream.id)
-            for stream in self.streams:
-                if not stream.private and stream.sid == user_stream.sid:
-                    user_stream = stream
+        for ovod in self.all_available_official_vods():
+            user_vod = UserStream(sid=ovod.id)
+            for vod in self.vods:
+                if not vod.private and vod.sid == user_vod.sid:
+                    user_vod = vod
                     break
-            ustreams.append(user_stream)
+            ustreams.append(user_vod)
 
         self.vods = ustreams
         self.save()
@@ -444,13 +444,13 @@ class Subscriber(MongoModel):
             return
 
         ustreams = []
-        for stream in self.all_available_official_catchups():
-            user_stream = UserStream(sid=stream.id)
-            for stream in self.streams:
-                if not stream.private and stream.sid == user_stream.sid:
-                    user_stream = stream
+        for ocatchup in self.all_available_official_catchups():
+            user_catchup = UserStream(sid=ocatchup.id)
+            for catchup in self.catchups:
+                if not catchup.private and catchup.sid == user_catchup.sid:
+                    user_catchup = catchup
                     break
-            ustreams.append(user_stream)
+            ustreams.append(user_catchup)
 
         self.catchups = ustreams
         self.save()
@@ -458,7 +458,7 @@ class Subscriber(MongoModel):
     def delete(self, *args, **kwargs):
         self.remove_all_own_streams()
         self.remove_all_own_vods()
-        return super(ServiceSettings, self).delete(*args, **kwargs)
+        return super(Subscriber, self).delete(*args, **kwargs)
 
     def delete_fake(self, *args, **kwargs):
         self.remove_all_own_streams()
