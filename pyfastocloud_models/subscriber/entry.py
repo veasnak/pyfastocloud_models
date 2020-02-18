@@ -188,9 +188,9 @@ class Subscriber(MongoModel):
             self.devices.append(device)
             self.save()
 
-    def remove_device(self, sid: ObjectId):
+    def remove_device(self, did: ObjectId):
         for dev in self.devices:
-            if dev.id == sid:
+            if dev.id == did:
                 self.devices.remove(dev)
                 break
         self.save()
@@ -199,9 +199,12 @@ class Subscriber(MongoModel):
         # if devices:
         #    devices.delete()
 
-    def find_device(self, sid: ObjectId):
-        devices = self.devices.filter(id=sid)
-        return devices.first()
+    def find_device(self, did: ObjectId):
+        for dev in self.devices:
+            if dev.id == did:
+                return dev
+
+        return None
 
     def generate_playlist(self, did: str, lb_server_host_and_port: str) -> str:
         result = '#EXTM3U\n'
