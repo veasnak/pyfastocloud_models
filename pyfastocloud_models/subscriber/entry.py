@@ -305,7 +305,7 @@ class Subscriber(MongoModel):
 
     def remove_official_catchup_by_id(self, sid: ObjectId):
         original_stream = IStream.get_stream_by_id(sid)
-        self.remove_official_vod(original_stream)
+        self.remove_official_catchup(original_stream)
 
     # own
     def add_own_stream(self, user_stream: UserStream):
@@ -351,7 +351,7 @@ class Subscriber(MongoModel):
             self.save()
 
     def remove_all_own_vods(self):
-        for stream in self.streams:
+        for stream in self.vods:
             if stream.private:
                 self.vods.remove(stream)
         self.save()
