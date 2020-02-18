@@ -362,6 +362,22 @@ class Subscriber(MongoModel):
 
         return streams
 
+    def official_vods(self):
+        streams = []
+        for stream in self.vods:
+            if not stream.private:
+                streams.append(stream)
+
+        return streams
+
+    def official_catchups(self):
+        streams = []
+        for stream in self.catchups:
+            if not stream.private:
+                streams.append(stream)
+
+        return streams
+
     def own_streams(self):
         streams = []
         for stream in self.streams:
