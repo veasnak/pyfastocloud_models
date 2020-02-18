@@ -158,7 +158,8 @@ class Subscriber(MongoModel):
     country = fields.CharField(min_length=2, max_length=3, required=True)
     language = fields.CharField(default=constants.DEFAULT_LOCALE, required=True)
 
-    servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[])
+    servers = fields.ListField(fields.ReferenceField(ServiceSettings, on_delete=fields.ReferenceField.PULL), default=[],
+                               blank=True)
     devices = fields.EmbeddedDocumentListField(Device, default=[], blank=True)
     max_devices_count = fields.IntegerField(default=constants.DEFAULT_DEVICES_COUNT)
     # content
