@@ -259,7 +259,7 @@ class Subscriber(MongoModel):
             if not vod.private and vod.sid == user_stream.sid:
                 return
 
-        self.vod.append(user_stream)
+        self.vods.append(user_stream)
         self.save()
 
     def remove_official_vod(self, ostream: IStream):
@@ -268,7 +268,7 @@ class Subscriber(MongoModel):
 
         for vod in self.vods:
             if not vod.private and vod.sid == ostream:
-                self.vod.remove(vod)
+                self.vods.remove(vod)
         self.save()
 
     def remove_official_vod_by_id(self, sid: ObjectId):
