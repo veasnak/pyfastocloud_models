@@ -689,8 +689,10 @@ class CatchupStream(TimeshiftRecorderStream):
 
     def to_front_dict(self) -> dict:
         base = super(CatchupStream, self).to_front_dict()
-        base[CatchupsFields.START_RECORD_FIELD] = date_to_utc_msec(self.start)
-        base[CatchupsFields.STOP_RECORD_FIELD] = date_to_utc_msec(self.stop)
+        start_utc = date_to_utc_msec(self.start)
+        stop_utc = date_to_utc_msec(self.stop)
+        base[CatchupsFields.START_RECORD_FIELD] = start_utc
+        base[CatchupsFields.STOP_RECORD_FIELD] = stop_utc
         return base
 
     @classmethod
@@ -703,6 +705,10 @@ class CatchupStream(TimeshiftRecorderStream):
     def config(self) -> dict:
         conf = super(CatchupStream, self).config()
         conf[ConfigFields.TIMESHIFT_DIR] = self._generate_catchup_dir(oid=OutputUrl.generate_id())
+        start_utc = date_to_utc_msec(self.start)
+        stop_utc = date_to_utc_msec(self.stop)
+        diff = stop_utc - start_utc
+        conf[ConfigFields.AUTO_EXIT_TIME_FIELD] = diff / 1000
         return conf
 
     # private:
