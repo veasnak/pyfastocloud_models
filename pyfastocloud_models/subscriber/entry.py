@@ -105,13 +105,6 @@ class UserStream(EmbeddedMongoModel):
     def get_id(self) -> str:
         return str(self.pk)
 
-    def to_dict(self) -> dict:
-        res = self.sid.to_dict()
-        res[UserStream.FAVORITE_FIELD] = self.favorite
-        res[UserStream.PRIVATE_FIELD] = self.private
-        res[UserStream.RECENT_FIELD] = date_to_utc_msec(self.recent)
-        return res
-
     def to_front_dict(self):
         res = self.sid.to_front_dict()
         res[UserStream.FAVORITE_FIELD] = self.favorite

@@ -124,11 +124,11 @@ class IStream(MongoModel):
                 StreamFields.VISIBLE_FIELD: self.visible,
                 StreamFields.IARC_FIELD: self.iarc, StreamFields.GROUP_FIELD: self.group}
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         raise NotImplementedError('subclasses must override get_type()!')
 
     @property
-    def id(self):
+    def id(self) -> ObjectId:
         return self.pk
 
     def get_id(self) -> str:
@@ -149,7 +149,7 @@ class IStream(MongoModel):
 
         return result
 
-    def generate_device_playlist(self, uid: str, passwd: str, did: str, lb_server_host_and_port: str,
+    def generate_device_playlist(self, uid: str, pass_hash: str, did: str, lb_server_host_and_port: str,
                                  header=True) -> str:
         result = '#EXTM3U\n' if header else ''
         stream_type = self.get_type()
@@ -163,7 +163,7 @@ class IStream(MongoModel):
                 parsed_uri = urlparse(out.uri)
                 if parsed_uri.scheme == 'http' or parsed_uri.scheme == 'https':
                     file_name = os.path.basename(parsed_uri.path)
-                    url = 'http://{0}/{1}/{2}/{3}/{4}/{5}/{6}'.format(lb_server_host_and_port, uid, passwd, did,
+                    url = 'http://{0}/{1}/{2}/{3}/{4}/{5}/{6}'.format(lb_server_host_and_port, uid, pass_hash, did,
                                                                       self.id,
                                                                       out.id, file_name)
                     result += '#EXTINF:-1 tvg-id="{0}" tvg-name="{1}" tvg-logo="{2}" group-title="{3}",{4}\n{5}\n'.format(
@@ -202,15 +202,7 @@ class HardwareStream(IStream):
     def __init__(self, *args, **kwargs):
         super(HardwareStream, self).__init__(*args, **kwargs)
 
-    def input_dict(self) -> list:
-        result = []
-        for inp in self.input:
-            out_dict = inp.to_son().to_dict()
-            result.append(out_dict)
-
-        return result
-
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         raise NotImplementedError('subclasses must override get_type()!')
 
     def get_log_level(self):
@@ -257,7 +249,7 @@ class RelayStream(HardwareStream):
     video_parser = fields.CharField(default=constants.DEFAULT_VIDEO_PARSER, required=True)
     audio_parser = fields.CharField(default=constants.DEFAULT_AUDIO_PARSER, required=True)
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.RELAY
 
     def get_video_parser(self):
@@ -286,7 +278,7 @@ class EncodeStream(HardwareStream):
     rsvg_logo = fields.EmbeddedDocumentField(RSVGLogo, default=RSVGLogo())
     aspect_ratio = fields.EmbeddedDocumentField(Rational, default=Rational())
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.ENCODE
 
     def get_relay_video(self):
@@ -322,14 +314,13 @@ class EncodeStream(HardwareStream):
 
 class TimeshiftRecorderStream(RelayStream):
     output = fields.EmbeddedDocumentListField(OutputUrl, default=[], blank=True)
+    timeshift_chunk_duration = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
+    timeshift_chunk_life_time = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
 
     def __init__(self, *args, **kwargs):
         super(TimeshiftRecorderStream, self).__init__(*args, **kwargs)
 
-    timeshift_chunk_duration = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_DURATION, required=True)
-    timeshift_chunk_life_time = fields.IntegerField(default=constants.DEFAULT_TIMESHIFT_CHUNK_LIFE_TIME, required=True)
-
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.TIMESHIFT_RECORDER
 
     def get_timeshift_chunk_duration(self):
@@ -345,7 +336,7 @@ class CatchupStream(TimeshiftRecorderStream):
         self.timeshift_chunk_duration = constants.DEFAULT_CATCHUP_CHUNK_DURATION
         self.auto_exit_time = constants.DEFAULT_CATCHUP_EXIT_TIME
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.CATCHUP
 
     def to_front_dict(self) -> dict:
@@ -364,7 +355,7 @@ class TimeshiftPlayerStream(RelayStream):
     def __init__(self, *args, **kwargs):
         super(TimeshiftPlayerStream, self).__init__(*args, **kwargs)
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.TIMESHIFT_PLAYER
 
 
@@ -374,7 +365,7 @@ class TestLifeStream(RelayStream):
     def __init__(self, *args, **kwargs):
         super(TestLifeStream, self).__init__(*args, **kwargs)
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.TEST_LIFE
 
 
@@ -382,7 +373,7 @@ class CodRelayStream(RelayStream):
     def __init__(self, *args, **kwargs):
         super(CodRelayStream, self).__init__(*args, **kwargs)
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.COD_RELAY
 
 
@@ -390,7 +381,7 @@ class CodEncodeStream(EncodeStream):
     def __init__(self, *args, **kwargs):
         super(CodEncodeStream, self).__init__(*args, **kwargs)
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.COD_ENCODE
 
 
@@ -423,7 +414,7 @@ class ProxyVodStream(ProxyStream, VodBasedStream):
         super(ProxyVodStream, self).__init__(*args, **kwargs)
         self.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.VOD_PROXY
 
 
@@ -432,7 +423,7 @@ class VodRelayStream(RelayStream, VodBasedStream):
         super(VodRelayStream, self).__init__(*args, **kwargs)
         self.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.VOD_RELAY
 
 
@@ -441,12 +432,12 @@ class VodEncodeStream(EncodeStream, VodBasedStream):
         super(VodEncodeStream, self).__init__(*args, **kwargs)
         self.tvg_logo = constants.DEFAULT_STREAM_PREVIEW_ICON_URL
 
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.VOD_ENCODE
 
 
 class EventStream(VodEncodeStream):
-    def get_type(self):
+    def get_type(self) -> constants.StreamType:
         return constants.StreamType.EVENT
 
 
