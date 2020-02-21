@@ -107,7 +107,7 @@ class IStream(MongoModel):
     iarc = fields.IntegerField(default=21, min_value=0,
                                required=True)  # https://support.google.com/googleplay/answer/6209544
 
-    parts = fields.ListField(fields.ReferenceField('IStream'), default=[])
+    parts = fields.ListField(fields.ReferenceField('IStream'), default=[], blank=True)
     output = fields.EmbeddedDocumentListField(OutputUrl, default=[])  #
 
     def add_part(self, stream):
